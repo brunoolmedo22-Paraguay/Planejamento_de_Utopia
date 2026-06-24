@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # ── Caminho base ────────────────────────────────────────────────────
-EXCEL_PATH = ""
+EXCEL_PATH = "ENTREGA_DEMANDA.xlsx"
 
 # ── Mapa cidade → aba do Excel ──────────────────────────────────────
 SHEET_MAP = {
