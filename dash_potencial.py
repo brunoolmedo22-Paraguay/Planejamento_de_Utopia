@@ -599,25 +599,48 @@ def tab_solar(socio: dict, gsa: dict):
 
     st.markdown("---")
 
-    # ── Estimativa de potencial fotovoltaico ──────────────────────
+    # ── Simulador de usina FV fictícia ───────────────────────────
     pvout_dia = avg("PVOUT") or 4.0
-    pvout_ano = pvout_dia * 365          # kWh/kWp/ano (já inclui PR do GSA)
+    gti_dia   = avg("GTI")   or 5.03
+    pvout_ano = pvout_dia * 365     # kWh/kWp/ano
+    EFF_MOD   = 0.21                # eficiência do módulo assumida (21%)
 
-    with st.expander("⚙️  Premissas de implantação fotovoltaica", expanded=True):
-        c1, c2 = st.columns(2)
-        frac = c1.slider("Fração da área aproveitável (%)", 1, 20, 2, key="s_frac") / 100
-        dens = c2.number_input("Densidade de instalação (MWp/km²)", 20.0, 80.0, 45.0, 5.0, key="s_dens")
+    st.markdown(
+        f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:14px;'        f'padding:14px 18px;margin-bottom:14px;">'        f'<div style="font-size:12px;font-weight:700;color:#b45309;text-transform:uppercase;'        f'letter-spacing:0.05em;margin-bottom:10px;">⚙️  Simulador de Usina Fotovoltaica Fictícia</div>'        f'<div style="font-size:12px;color:{TEXT_SEC};margin-bottom:4px;">'        f'Insira a capacidade da usina — os resultados são calculados com o recurso solar local '        f'(PVOUT = {pvout_dia:.2f} kWh/kWp/dia · GTI = {gti_dia:.2f} kWh/m²/dia · η = {EFF_MOD*100:.0f}%).'        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
-    area_util = AREA_KM2 * frac
-    cap_mwp = area_util * dens
-    energia_mwh = cap_mwp * pvout_ano       # MWh/ano  (MWp × kWh/kWp/ano = MWh/ano)
-    cobertura = energia_mwh / socio["ee"] * 100 if socio["ee"] else 0
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        kwp_usina = st.number_input(
+            "Capacidade da usina (kWp)",
+            min_value=1.0,
+            max_value=1_000_000.0,
+            value=1_000.0,
+            step=100.0,
+            format="%.0f",
+            key="s_kwp",
+            help="Digite o pico de potência da usina em kWp (ex: 1000 = 1 MWp)",
+        )
 
-    k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Rendimento específico", f"{_fmt(pvout_ano,0)}", "kWh/kWp/ano", SOL), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Capacidade instalável", f"{_fmt(cap_mwp/1000,2)} GWp", f"{_fmt(cap_mwp)} MWp", SOL), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Geração anual estimada", f"{_fmt(energia_mwh/1e6,2)} TWh", f"{_fmt(energia_mwh)} MWh", "#d97706"), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Cobertura da demanda 2025", f"{_fmt(cobertura,1)} %", "do consumo de 2025", ACCENT_D), unsafe_allow_html=True)
+    # ── Cálculos da usina ─────────────────────────────────────────
+    mwp_usina    = kwp_usina / 1_000                          # MWp
+    e_dia_kwh    = kwp_usina * pvout_dia                      # kWh/dia
+    e_ano_mwh    = kwp_usina * pvout_ano / 1_000              # MWh/ano
+    e_ano_gwh    = e_ano_mwh / 1_000                          # GWh/ano
+    # Área: P_pico = GTI_dia * A * EFF  →  A = kWp/(GTI_dia_kW * EFF)
+    # GTI em kWh/m²/dia → energia/dia por m² em kWh; kWp instalado = GTI*η*A
+    area_m2      = (kwp_usina * 1_000) / (gti_dia * 1_000 * EFF_MOD)  # m²
+    area_ha      = area_m2 / 10_000
+    # Fator de capacidade: E_ano / (kWp * 8760 h)
+    fc           = (kwp_usina * pvout_ano) / (kwp_usina * 8_760) * 100  # %
+    cobertura    = e_ano_mwh / socio["ee"] * 100 if socio["ee"] else 0
+
+    with c2:
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Geração diária</div>'            f'<div style="font-size:18px;font-weight:800;color:{SOL};">{e_dia_kwh:,.1f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">kWh/dia</div></div>'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Geração anual</div>'            f'<div style="font-size:18px;font-weight:800;color:#d97706;">{e_ano_gwh:,.3f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Área necessária</div>'            f'<div style="font-size:18px;font-weight:800;color:{ACCENT_D};">{area_ha:,.2f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">hectares (η=21%)</div></div>'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Fator de capacidade</div>'            f'<div style="font-size:18px;font-weight:800;color:#7c3aed;">{fc:.1f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">%</div></div>'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Capacidade</div>'            f'<div style="font-size:18px;font-weight:800;color:{SOL};">{mwp_usina:,.2f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">MWp</div></div>'            f'<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;">'            f'<div style="font-size:9px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.05em;">Cobertura demanda</div>'            f'<div style="font-size:18px;font-weight:800;color:{ACCENT};">{cobertura:.3f}</div>'            f'<div style="font-size:10px;color:{TEXT_SEC};">% do consumo 2025</div></div>'            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     g1, g2 = st.columns(2)
