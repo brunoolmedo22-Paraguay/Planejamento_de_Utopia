@@ -28,7 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 CSV_PATH = ROOT / "projecoes_demanda.csv"
-EXCEL_PATH = ROOT / "ENTREGA_DEMANDA.xlsx"
+EXCEL_PATH = ROOT / "ENTREGA_DEMANDA_utopia.xlsx"
 
 # ── Paleta ───────────────────────────────────────────────────────────
 ACCENT   = "#0ea5e9"
