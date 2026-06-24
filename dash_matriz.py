@@ -636,14 +636,15 @@ def tab_analise_economica():
     with cVPL:
         st.markdown("##### Valor Presente Líquido do custo")
         v1, v2, v3 = st.columns(3)
+        custo_nom = R["pmt_capex"] + R["opex_f_anual"] + R["opex_v_anual"]  # desembolso nominal/ano
         v1.markdown(kpi_card("VPL CAPEX", _us(R["npv_capex"]),
-                            f"{_fmt(R['npv_capex']/R['npv_total']*100,1)} % do total", C_CAPEX),
+                            f"{_fmt(R['pmt_capex']/custo_nom*100,1)} % do desembolso anual", C_CAPEX),
                     unsafe_allow_html=True)
         v2.markdown(kpi_card("VPL OPEX fixo", _us(R["npv_opex_f"]),
-                            f"{_fmt(R['npv_opex_f']/R['npv_total']*100,1)} % do total", C_OPEXF),
+                            f"{_fmt(R['opex_f_anual']/custo_nom*100,1)} % do desembolso anual", C_OPEXF),
                     unsafe_allow_html=True)
         v3.markdown(kpi_card("VPL OPEX variável", _us(R["npv_opex_v"]),
-                            f"{_fmt(R['npv_opex_v']/R['npv_total']*100,1)} % do total", C_OPEXV),
+                            f"{_fmt(R['opex_v_anual']/custo_nom*100,1)} % do desembolso anual", C_OPEXV),
                     unsafe_allow_html=True)
         _gap(8)
 
@@ -662,6 +663,46 @@ def tab_analise_economica():
 
     with cTAR:
         st.markdown("##### Tarifa (LCOE)")
+
+        # ── equação LCOE como SVG inline ──────────────────────────────
+        lcoe_svg = """<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+padding:12px 16px;margin-bottom:10px;text-align:center;">
+<svg viewBox="0 0 340 72" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:340px;">
+  <!-- LCOE = -->
+  <text x="4" y="40" font-family="Georgia,serif" font-size="15" fill="#0f172a" font-style="italic">LCOE</text>
+  <text x="52" y="40" font-family="Georgia,serif" font-size="15" fill="#0f172a">=</text>
+  <!-- numerador -->
+  <text x="72" y="22" font-family="Georgia,serif" font-size="11" fill="#0284c7">
+    <tspan font-size="13">&#x2211;</tspan>
+    <tspan baseline-shift="super" font-size="9">n</tspan>
+  </text>
+  <text x="88" y="22" font-family="Georgia,serif" font-size="11" fill="#0284c7">
+    <tspan font-style="italic">C</tspan><tspan baseline-shift="sub" font-size="9">t</tspan>
+  </text>
+  <text x="104" y="22" font-family="Georgia,serif" font-size="11" fill="#0284c7"> / (1+r)</text>
+  <text x="144" y="18" font-family="Georgia,serif" font-size="9" fill="#0284c7">t</text>
+  <!-- barra de fracción -->
+  <line x1="68" y1="32" x2="200" y2="32" stroke="#64748b" stroke-width="1.2"/>
+  <!-- denominador -->
+  <text x="72" y="52" font-family="Georgia,serif" font-size="11" fill="#047857">
+    <tspan font-size="13">&#x2211;</tspan>
+    <tspan baseline-shift="super" font-size="9">n</tspan>
+  </text>
+  <text x="88" y="52" font-family="Georgia,serif" font-size="11" fill="#047857">
+    <tspan font-style="italic">E</tspan><tspan baseline-shift="sub" font-size="9">t</tspan>
+  </text>
+  <text x="104" y="52" font-family="Georgia,serif" font-size="11" fill="#047857"> / (1+r)</text>
+  <text x="144" y="48" font-family="Georgia,serif" font-size="9" fill="#047857">t</text>
+  <!-- legenda -->
+  <text x="210" y="20" font-family="Arial,sans-serif" font-size="9" fill="#0284c7">C&#x209C; = CAPEX + OPEX</text>
+  <text x="210" y="34" font-family="Arial,sans-serif" font-size="9" fill="#047857">E&#x209C; = energia gerada</text>
+  <text x="210" y="48" font-family="Arial,sans-serif" font-size="9" fill="#64748b">r = WACC,  t = 0…n</text>
+  <text x="210" y="62" font-family="Arial,sans-serif" font-size="9" fill="#64748b">n = vida útil (LFSP)</text>
+</svg>
+<div style="font-size:10.5px;color:#64748b;margin-top:4px;">Fonte: IRENA · IEA · literatura técnica</div>
+</div>"""
+        st.markdown(lcoe_svg, unsafe_allow_html=True)
+
         # card grande da tarifa
         st.markdown(
             f'<div style="background:linear-gradient(135deg,{ACCENT},{ACCENT_D});border-radius:18px;'
@@ -889,7 +930,7 @@ def run_matriz(page=None):
     )
 
     t_atual, t_cfg, t_econ = st.tabs(
-        ["📅 Atualidade (2025)", "🧮 Configuração Econômica", "💰 Análise Econômica · VPL & Tarifa"]
+        ["📅 Atualidade (2025)", "🧮 Configuração Econômica", "🧪 TESTE da Análise Econômica"]
     )
     with t_atual:
         tab_atualidade()
