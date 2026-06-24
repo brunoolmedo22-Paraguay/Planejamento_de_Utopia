@@ -8,6 +8,11 @@ Arquivos esperados na MESMA pasta deste módulo (raiz do projeto):
     - ENTREGA_DEMANDA.xlsx      (aba "RESUMO UTÓPIA" -> pop/PIB/EE 2025)
     - GSA_Report_UTOPIA.xlsx    (relatório do Global Solar Atlas)
     - mapa.jpeg                 (mapa do país)
+    - meanwindspeed.png         (curva % áreas mais ventosas, do Global Wind Atlas)
+    - EYC_area_1_*_Annual-Energy-Production.tif  (4 rasters AEP, um por turbina)
+
+Dependência extra para ler os .tif (adicionar ao requirements.txt):
+    rasterio        (preferida)  ou  tifffile  (alternativa leve)
 
 Entry-point chamado pelo app central:
     from dash_potencial import run_potencial
@@ -18,6 +23,7 @@ Entry-point chamado pelo app central:
 import base64
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -42,6 +48,29 @@ AREA_KM2       = 12000     # área total
 # Participações da matriz (BEN) informadas
 HIDRO_SHARE_2025 = 0.40    # BEN 2025
 TERMO_SHARE_2026 = 0.55    # BEN 2026
+
+# ── Recurso eólico (Global Wind Atlas — 10% das áreas mais ventosas) ─
+WIND_PCT       = 10        # % das áreas mais ventosas consideradas
+WIND_HEIGHT    = 100       # m (altura de referência das leituras)
+WIND_PD_10PCT  = 712       # W/m²  · densidade de potência (10% mais ventoso)
+WIND_VMEAN     = 9.98      # m/s   · velocidade média (10% mais ventoso)
+WIND_IMG       = "meanwindspeed.png"
+
+# Espaçamento típico de parque eólico (em diâmetros de rotor)
+SEP_CROSS = 5              # transversal ao vento
+SEP_DOWN  = 8              # na direção do vento
+
+# Turbinas selecionadas no EYC + raster .tif de cada uma (AEP em GWh/ano)
+TURBINES = [
+    {"nome": "Generic 4.0 MW · IEC Class 1", "p_kw": 4000,  "rotor": 117, "hub": 100, "v_design": 10.0, "rho": 1.225,
+     "tif": "EYC_area_1_Generic-4.0-MW---IEC-Class-1_100m_10%_Annual-Energy-Production.tif"},
+    {"nome": "Generic 4.5 MW · IEC Class 2", "p_kw": 4500,  "rotor": 136, "hub": 100, "v_design": 8.5,  "rho": 1.225,
+     "tif": "EYC_area_1_Generic-4.5-MW---IEC-Class-2_100m_10%_Annual-Energy-Production.tif"},
+    {"nome": "Generic 4.5 MW · IEC Class 3", "p_kw": 4500,  "rotor": 150, "hub": 100, "v_design": 7.5,  "rho": 1.225,
+     "tif": "EYC_area_1_Generic-4.5-MW---IEC-Class-3_100m_10%_Annual-Energy-Production.tif"},
+    {"nome": "Generic 15.0 MW · Offshore",   "p_kw": 15000, "rotor": 240, "hub": 150, "v_design": 10.0, "rho": 1.225,
+     "tif": "EYC_area_1_Generic-15.0-MW---Offshore_150m_10%_Annual-Energy-Production.tif"},
+]
 
 # ── Paleta / tema (idêntico ao dash_historico p/ consistência) ──────
 ACCENT   = "#0ea5e9"
@@ -190,6 +219,60 @@ def load_gsa_dist(excel_path: str, key: str) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["de", "ate", "pct"])
 
 
+@st.cache_data
+def read_aep_tif(tif_name: str) -> dict:
+    """
+    Lê um raster .tif de Annual Energy Production (GWh/ano por turbina) do GWA.
+    Tenta rasterio; se ausente, cai para tifffile. Devolve estatísticas e um
+    array 2D reduzido para o heatmap. Retorna {} se não conseguir ler.
+    """
+    path = ROOT / tif_name
+    if not path.exists():
+        return {"erro": "arquivo não encontrado"}
+
+    arr = None
+    # 1) rasterio (trata nodata/máscara corretamente)
+    try:
+        import rasterio
+        with rasterio.open(str(path)) as ds:
+            band = ds.read(1, masked=True)
+            arr = np.ma.filled(band.astype("float64"), np.nan)
+            if ds.nodata is not None:
+                arr = np.where(arr == ds.nodata, np.nan, arr)
+    except Exception:
+        # 2) tifffile (lê como matriz bruta)
+        try:
+            import tifffile
+            arr = np.asarray(tifffile.imread(str(path)), dtype="float64")
+            if arr.ndim == 3:
+                arr = arr[0]
+        except Exception as e:
+            return {"erro": f"sem leitor de .tif ({e})"}
+
+    arr = np.asarray(arr, dtype="float64")
+    # limpa nodata/sentinelas: mantém apenas valores físicos plausíveis
+    arr = np.where(np.isfinite(arr), arr, np.nan)
+    arr = np.where((arr > 0) & (arr < 1e6), arr, np.nan)
+
+    valid = arr[np.isfinite(arr)]
+    if valid.size == 0:
+        return {"erro": "raster vazio (use retângulo, não polígono, no EYC)"}
+
+    stats = {
+        "mean": float(np.nanmean(valid)),
+        "max": float(np.nanmax(valid)),
+        "min": float(np.nanmin(valid)),
+        "p90": float(np.nanpercentile(valid, 90)),
+        "n_pix": int(valid.size),
+    }
+
+    # reduz para heatmap (~120 px no maior lado)
+    step_r = max(1, arr.shape[0] // 120)
+    step_c = max(1, arr.shape[1] // 120)
+    heat = arr[::step_r, ::step_c]
+    return {"stats": stats, "heat": heat.tolist()}
+
+
 # =======================================================================
 #  ABA 1 — GEOLOCALIZAÇÃO
 # =======================================================================
@@ -244,85 +327,146 @@ def tab_geolocalizacao(socio: dict):
 # =======================================================================
 #  ABA 2 — EÓLICA
 # =======================================================================
-def tab_eolica(socio: dict):
-    section_title("Potencial Eólico",
-                  "Estimativa a partir das leituras do Global Wind Atlas para a área do país")
+def _turbine_table_html() -> str:
+    """Tabela de especificações das 4 turbinas em HTML estilizado."""
+    linhas = [
+        ("Potência nominal", "p_kw", "kW", 0),
+        ("Diâmetro do rotor", "rotor", "m", 0),
+        ("Altura do cubo", "hub", "m", 0),
+        ("Vel. média de projeto", "v_design", "m/s", 1),
+        ("Densidade do ar", "rho", "kg/m³", 3),
+    ]
+    th = ("padding:8px 10px;font-size:11px;font-weight:700;color:#fff;"
+          "background:linear-gradient(135deg,#059669,#10b981);text-align:center;")
+    td = "padding:7px 10px;font-size:12px;color:#0f172a;text-align:center;border-bottom:1px solid #e2e8f0;"
+    tdl = ("padding:7px 10px;font-size:11px;font-weight:600;color:#475569;text-align:left;"
+           "border-bottom:1px solid #e2e8f0;background:#f8fafc;text-transform:uppercase;letter-spacing:0.03em;")
 
+    head = f'<th style="{th};text-align:left;border-top-left-radius:10px;">Especificação</th>'
+    for i, t in enumerate(TURBINES):
+        radius = "border-top-right-radius:10px;" if i == len(TURBINES) - 1 else ""
+        head += f'<th style="{th}{radius}">{t["nome"]}</th>'
+
+    body = ""
+    for lbl, key, unit, dec in linhas:
+        body += f'<tr><td style="{tdl}">{lbl} ({unit})</td>'
+        for t in TURBINES:
+            body += f'<td style="{td}">{_fmt(t[key], dec)}</td>'
+        body += "</tr>"
+
+    return (f'<div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;'
+            f'box-shadow:0 2px 10px rgba(16,185,129,0.06);"><table style="border-collapse:collapse;width:100%;">'
+            f"<tr>{head}</tr>{body}</table></div>")
+
+
+def _turbine_cell(t: dict, socio: dict):
+    """Renderiza a análise do .tif de UMA turbina dentro de uma célula do grid."""
     st.markdown(
-        '<a href="https://globalwindatlas.info/" target="_blank" style="text-decoration:none;">'
-        f'<div style="display:inline-block;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.3);'
-        f'color:#047857;padding:8px 16px;border-radius:10px;font-weight:600;font-size:13px;margin-bottom:6px;">'
-        f'🌬️ Abrir o Global Wind Atlas</div></a>',
+        f'<div style="font-size:15px;font-weight:700;color:{TEXT_PRI};margin-bottom:1px;">{t["nome"]}</div>'
+        f'<div style="font-size:11px;color:{TEXT_SEC};margin-bottom:8px;">'
+        f'{_fmt(t["p_kw"]/1000,1)} MW · rotor {t["rotor"]} m · cubo {t["hub"]} m</div>',
         unsafe_allow_html=True,
     )
-    st.info("Os campos abaixo vêm **pré-preenchidos com valores típicos da região**. "
-            "Substitua pelos números que o Global Wind Atlas devolve para o retângulo do país "
-            "(velocidade média, densidade de potência e fator de capacidade na altura do rotor).")
 
-    # ── Entradas (leituras do GWA + premissas de implantação) ─────
-    with st.expander("⚙️  Parâmetros do recurso e da implantação", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        v100 = c1.number_input("Velocidade média @100 m (m/s)", 3.0, 12.0, 6.5, 0.1, key="w_v100")
-        pd100 = c2.number_input("Densidade de potência @100 m (W/m²)", 50.0, 1500.0, 320.0, 10.0, key="w_pd")
-        cf = c3.number_input("Fator de capacidade (0–1)", 0.10, 0.65, 0.32, 0.01, key="w_cf")
+    res = read_aep_tif(t["tif"])
+    if "erro" in res:
+        st.warning(f"`.tif` indisponível: {res['erro']}\n\nArquivo: `{t['tif']}`")
+        return
 
-        c4, c5, c6 = st.columns(3)
-        frac = c4.slider("Fração da área aproveitável (%)", 1, 30, 5, key="w_frac") / 100
-        dens = c5.number_input("Densidade de instalação (MW/km²)", 1.0, 12.0, 4.0, 0.5, key="w_dens")
-        perdas = c6.slider("Perdas de sistema (%)", 0, 25, 10, key="w_loss") / 100
+    s = res["stats"]
+    aep_med = s["mean"]                       # GWh/ano por turbina
+    aep_max = s["max"]
 
-        st.markdown("**Perfil de velocidade por altura (opcional, para o gráfico):**")
-        h1, h2, h3 = st.columns(3)
-        v150 = h1.number_input("Vel. @150 m (m/s)", 3.0, 13.0, 7.0, 0.1, key="w_v150")
-        v200 = h2.number_input("Vel. @200 m (m/s)", 3.0, 14.0, 7.4, 0.1, key="w_v200")
-        v50  = h3.number_input("Vel. @50 m (m/s)",  3.0, 12.0, 5.9, 0.1, key="w_v50")
+    # Fator de capacidade derivado do AEP médio
+    cf = aep_med * 1e6 / (t["p_kw"] * 8760)   # GWh->kWh / (kW * h)
+    nota_unidade = ""
+    if cf > 0.75:                              # AEP provavelmente em MWh -> corrige
+        aep_med, aep_max = aep_med / 1000, aep_max / 1000
+        cf = cf / 1000
+        nota_unidade = " (valores reescalados de MWh→GWh)"
 
-    # ── Cálculos ──────────────────────────────────────────────────
-    area_util = AREA_KM2 * frac                       # km²
-    cap_mw = area_util * dens                          # MW
-    energia_mwh = cap_mw * cf * 8760 * (1 - perdas)    # MWh/ano
-    cobertura = energia_mwh / socio["ee"] * 100 if socio["ee"] else 0
+    # Quantas turbinas cabem nos 10% mais ventosos (1.200 km²) e potencial total
+    usable_km2 = AREA_KM2 * WIND_PCT / 100
+    area_por_turb = (SEP_CROSS * t["rotor"]) * (SEP_DOWN * t["rotor"]) / 1e6   # km²
+    n_turb = usable_km2 / area_por_turb
+    total_gwh = n_turb * aep_med
+    cobertura = total_gwh * 1e3 / socio["ee"] * 100 if socio["ee"] else 0
 
+    m1, m2, m3 = st.columns(3)
+    m1.markdown(kpi_card("AEP médio/turbina", f"{_fmt(aep_med,1)}", "GWh/ano", WIN), unsafe_allow_html=True)
+    m2.markdown(kpi_card("Fator de capacidade", f"{_fmt(cf*100,1)} %", "no recurso 10%", "#047857"), unsafe_allow_html=True)
+    m3.markdown(kpi_card("Potencial da área", f"{_fmt(total_gwh/1000,2)} TWh", f"≈ {_fmt(n_turb,0)} turbinas", ACCENT_D), unsafe_allow_html=True)
+
+    # Heatmap do raster
+    heat = np.array(res["heat"], dtype="float64")
+    fig = go.Figure(go.Heatmap(
+        z=heat, colorscale="YlGn", showscale=True,
+        colorbar=dict(title="GWh", thickness=10, len=0.85),
+        hovertemplate="AEP: %{z:.1f} GWh/ano<extra></extra>",
+    ))
+    fig.update_layout(
+        height=240, margin=dict(l=6, r=6, t=28, b=6),
+        title=dict(text="AEP por posição (raster .tif)", font=dict(size=12, color=TEXT_PRI, weight="bold"), x=0),
+        paper_bgcolor=BG_CHART, plot_bgcolor=BG_CHART,
+        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False, autorange="reversed", scaleanchor="x"),
+    )
+    st.plotly_chart(fig, use_container_width=True, key=f"tif_{t['p_kw']}_{t['rotor']}")
+    st.caption(f"AEP máx {_fmt(aep_max,1)} GWh · {_fmt(s['n_pix'],0)} px válidos · "
+               f"espaçamento {SEP_CROSS}D×{SEP_DOWN}D{nota_unidade}")
+
+
+def tab_eolica(socio: dict):
+    section_title("Potencial Eólico",
+                  "Recurso e produção por turbina · Global Wind Atlas (10% das áreas mais ventosas)")
+
+    # ── KPIs do recurso (números reais do GWA) ────────────────────
     k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Área aproveitável", f"{_fmt(area_util)}", "km²", WIN), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Capacidade instalável", f"{_fmt(cap_mw/1000, 2)} GW", f"{_fmt(cap_mw)} MW", WIN), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Geração anual estimada", f"{_fmt(energia_mwh/1e6, 2)} TWh", f"{_fmt(energia_mwh)} MWh", WIN), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Cobertura da demanda 2025", f"{_fmt(cobertura, 1)} %", "do consumo de 2025", ACCENT_D), unsafe_allow_html=True)
+    k1.markdown(kpi_card("Densidade de potência", f"{_fmt(WIND_PD_10PCT)}", f"W/m² · 10% mais ventoso", WIN), unsafe_allow_html=True)
+    k2.markdown(kpi_card("Velocidade média", f"{_fmt(WIND_VMEAN,2)}", "m/s", "#047857"), unsafe_allow_html=True)
+    k3.markdown(kpi_card("Altura de referência", f"{WIND_HEIGHT} m", "altura do cubo"), unsafe_allow_html=True)
+    k4.markdown(kpi_card("Área avaliada", f"{_fmt(AREA_KM2*WIND_PCT/100)}", f"km² · {WIND_PCT}% de {_fmt(AREA_KM2)}", ACCENT_D), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    g1, g2 = st.columns(2)
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # Perfil de velocidade
-    with g1:
-        fig = base_fig("Perfil de velocidade do vento por altura")
-        alturas = [50, 100, 150, 200]
-        vels = [v50, v100, v150, v200]
-        fig.add_trace(go.Scatter(
-            x=vels, y=alturas, mode="lines+markers+text",
-            text=[f"{v:.1f}" for v in vels], textposition="top right",
-            line=dict(color=WIN, width=3), marker=dict(size=9, color=WIN),
-            name="Velocidade média", hovertemplate="%{x:.1f} m/s @ %{y} m<extra></extra>",
-        ))
-        fig.update_layout(xaxis_title="Velocidade (m/s)", yaxis_title="Altura (m)", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True, key="w_perfil")
+    # ── Tabela de turbinas + curva % áreas mais ventosas ──────────
+    col_tab, col_img = st.columns([1.4, 1], gap="large")
+    with col_tab:
+        st.markdown("##### Turbinas avaliadas no Energy Yield Calculator")
+        st.markdown(_turbine_table_html(), unsafe_allow_html=True)
+    with col_img:
+        st.markdown("##### Velocidade vs. % de área mais ventosa")
+        img = _img_b64(WIND_IMG)
+        if img:
+            st.markdown(
+                f'<div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;padding:8px;background:#fff;">'
+                f'<img src="{img}" style="width:100%;display:block;" /></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.warning(f"Arquivo `{WIND_IMG}` não encontrado na raiz do projeto.")
 
-    # Potencial vs demanda
-    with g2:
-        fig = base_fig("Geração potencial vs. consumo atual")
-        fig.add_trace(go.Bar(
-            x=["Consumo 2025", "Potencial eólico"],
-            y=[socio["ee"], energia_mwh],
-            marker_color=["#cbd5e1", WIN],
-            text=[f"{_fmt(socio['ee']/1e6,2)} TWh", f"{_fmt(energia_mwh/1e6,2)} TWh"],
-            textposition="outside",
-            hovertemplate="%{y:,.0f} MWh<extra></extra>",
-        ))
-        fig.update_layout(yaxis_title="MWh/ano", showlegend=False)
-        st.plotly_chart(fig, use_container_width=True, key="w_bar")
+    st.markdown("---")
+    st.markdown("##### Análise dos rasters de produção anual (AEP) por turbina")
 
-    st.caption("Capacidade = área × fração aproveitável × densidade (MW/km²). "
-               "Geração = capacidade × fator de capacidade × 8.760 h × (1 − perdas). "
-               "É um potencial técnico: ajuste a fração aproveitável para um cenário realista de implantação.")
+    # ── Grid 2×2: uma turbina por célula ──────────────────────────
+    r1c1, r1c2 = st.columns(2, gap="large")
+    with r1c1:
+        _turbine_cell(TURBINES[0], socio)
+    with r1c2:
+        _turbine_cell(TURBINES[1], socio)
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    r2c1, r2c2 = st.columns(2, gap="large")
+    with r2c1:
+        _turbine_cell(TURBINES[2], socio)
+    with r2c2:
+        _turbine_cell(TURBINES[3], socio)
+
+    st.markdown("---")
+    st.caption("AEP lido diretamente dos .tif do GWA (GWh/ano por turbina). "
+               f"Potencial da área = AEP médio × nº de turbinas que cabem em {_fmt(AREA_KM2*WIND_PCT/100)} km² "
+               f"(espaçamento {SEP_CROSS}D×{SEP_DOWN}D). É potencial técnico bruto, sem restrições de uso do solo.")
 
 
 # =======================================================================
