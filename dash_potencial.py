@@ -5,7 +5,7 @@ Seção "Potencial Energético" — País de Utópia
 Abas: Geolocalização · Eólica · Solar · Hidro · Termo
 
 Arquivos esperados na MESMA pasta deste módulo (raiz do projeto):
-    - ENTREGA_DEMANDA.xlsx      (aba "RESUMO UTÓPIA" -> pop/PIB/EE 2025)
+    - ENTREGA_DEMANDA_utopia.xlsx      (aba "RESUMO UTÓPIA" -> pop/PIB/EE 2025)
     - GSA_Report_UTOPIA.xlsx    (relatório do Global Solar Atlas)
     - mapa.jpeg                 (mapa do país)
     - meanwindspeed.png         (curva % áreas mais ventosas, do Global Wind Atlas)
@@ -31,7 +31,7 @@ import streamlit as st
 # ── Raiz portátil (assets ao lado deste arquivo) ────────────────────
 ROOT = Path(__file__).parent
 
-EXCEL_HIST = str(ROOT / "ENTREGA_DEMANDA.xlsx")
+EXCEL_HIST = str(ROOT / "ENTREGA_DEMANDA_utopia.xlsx")
 EXCEL_GSA  = str(ROOT / "GSA_Report_UTOPIA.xlsx")
 MAPA_FILE  = "mapa.jpeg"
 
@@ -724,7 +724,7 @@ def run_potencial(page=None):
         socio = load_socio_2025(EXCEL_HIST)
     except Exception as e:
         st.error(f"Não foi possível ler os dados socioeconômicos de 2025 "
-                 f"(`ENTREGA_DEMANDA.xlsx` / aba RESUMO UTÓPIA): {e}")
+                 f"(`ENTREGA_DEMANDA_utopia.xlsx` / aba RESUMO UTÓPIA): {e}")
         return
 
     try:
