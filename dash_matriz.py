@@ -699,7 +699,7 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
   <text x="210" y="48" font-family="Arial,sans-serif" font-size="9" fill="#64748b">r = WACC,  t = 0…n</text>
   <text x="210" y="62" font-family="Arial,sans-serif" font-size="9" fill="#64748b">n = vida útil (LFSP)</text>
 </svg>
-<div style="font-size:10.5px;color:#64748b;margin-top:4px;">Fonte: IRENA · IEA · literatura técnica</div>
+<div style="font-size:14.5px;color:#64748b;margin-top:4px;">Fonte: IRENA · IEA · literatura técnica</div>
 </div>"""
         st.markdown(lcoe_svg, unsafe_allow_html=True)
 
