@@ -319,9 +319,121 @@ def tab_geolocalizacao(socio: dict):
         s2.markdown(kpi_card("PIB 2025", f"Utd$ {_fmt(socio['pib'])}", "absoluto"), unsafe_allow_html=True)
         s3.markdown(kpi_card("Consumo EE 2025", f"{_fmt(socio['ee'])}", "MWh/ano", "#7c3aed"), unsafe_allow_html=True)
 
+    # ── RESUMO DO ESTUDO DE POTENCIAL ────────────────────────────
     st.markdown("---")
-    st.caption("As dimensões definem a área de referência (12.000 km²) usada nas estimativas de potencial "
-               "solar e eólico das abas seguintes.")
+    st.markdown(
+        f'<h3 style="font-size:18px;font-weight:700;color:{TEXT_PRI};letter-spacing:-0.2px;'
+        f'margin-bottom:4px;">🔋 Resumo do Estudo de Potencial Energético</h3>'
+        f'<p style="font-size:13px;color:{TEXT_SEC};margin-bottom:18px;">'
+        f'Principais indicadores de cada fonte · análise detalhada nas abas seguintes</p>',
+        unsafe_allow_html=True,
+    )
+
+    css_bloco = (
+        "background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;"
+        "padding:18px 20px;box-shadow:0 2px 12px rgba(14,165,233,0.05);height:100%;"
+    )
+
+    def _badge(cor, emoji, txt):
+        return (f'<span style="display:inline-block;background:{cor}22;color:{cor};'
+                f'border:1px solid {cor}44;border-radius:20px;padding:2px 10px;'
+                f'font-size:11px;font-weight:700;margin-bottom:10px;">{emoji} {txt}</span>')
+
+    def _linha(label, valor, sub=""):
+        s = f'<div style="margin:6px 0;"><span style="font-size:11px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{label}</span><br>'
+        s += f'<span style="font-size:20px;font-weight:800;color:{TEXT_PRI};letter-spacing:-0.4px;">{valor}</span>'
+        if sub:
+            s += f'<span style="font-size:11px;color:{TEXT_SEC};margin-left:6px;">{sub}</span>'
+        s += '</div>'
+        return s
+
+    hidro_2025_twh = HIDRO_SHARE_2025 * socio["ee"] / 1e6
+    hidro_44_twh   = 0.44 * socio["ee"] / 1e6
+    margem_twh      = hidro_44_twh - hidro_2025_twh
+
+    # Tenta ler AEP dos tifs para resumo eólico
+    aep_vals = []
+    for t in TURBINES:
+        r = read_aep_tif(t["tif"])
+        if "stats" in r:
+            aep_vals.append(r["stats"]["mean"])
+
+    # Row 1: Eólica | Solar
+    col_e, col_s = st.columns(2, gap="large")
+    with col_e:
+        # monta lista de AEPs por turbina
+        if aep_vals:
+            linhas_aep = "".join(
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'border-bottom:1px solid #f1f5f9;padding:5px 0;">'
+                f'<span style="font-size:11px;color:{TEXT_SEC};">{t["nome"].split("·")[0].strip()}</span>'
+                f'<span style="font-size:13px;font-weight:700;color:{WIN};">{_fmt(v,1)} GWh/ano</span></div>'
+                for t, v in zip(TURBINES, aep_vals)
+            )
+        else:
+            linhas_aep = f'<p style="font-size:12px;color:{TEXT_SEC};">Arquivos .tif não encontrados</p>'
+
+        st.markdown(
+            f'<div style="{css_bloco}">'
+            f'{_badge(WIN, "🌬️", "Eólica")}'
+            f'{_linha("Densidade de potência", f"{_fmt(WIND_PD_10PCT)} W/m²", "10% mais ventoso")}'
+            f'{_linha("Velocidade média @100 m", f"{_fmt(WIND_VMEAN,2)} m/s")}'
+            f'<div style="margin-top:10px;font-size:11px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">AEP médio por turbina</div>'
+            f'{linhas_aep}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_s:
+        st.markdown(
+            f'<div style="{css_bloco}">'
+            f'{_badge(SOL, "☀️", "Solar")}'
+            f'{_linha("GTI — Irradiação inclinada ótima", "5,03", "kWh/m²/dia")}'
+            f'{_linha("PVOUT — Produção fotovoltaica", "4,00", "kWh/kWp/dia")}'
+            f'<div style="margin-top:12px;font-size:11px;color:{TEXT_SEC};line-height:1.5;">'
+            f'Inclinação ótima dos módulos: <b>15°</b> · Temperatura média: <b>24,4 °C</b><br>'
+            f'GHI: 4,90 · DNI: 3,61 · DIF: 2,40 kWh/m²/dia'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Row 2: Hidro | Termo
+    col_h, col_t = st.columns(2, gap="large")
+    with col_h:
+        _hidro_mwh_str = _fmt(HIDRO_SHARE_2025 * socio["ee"])
+        st.markdown(
+            f'<div style="{css_bloco}">'
+            f'{_badge(HYD, "💧", "Hidro")}'
+            f'{_linha("Geração hidro 2025", f"{_fmt(hidro_2025_twh,2)} TWh", f"40% do BEN · {_hidro_mwh_str} MWh")}'
+            f'{_linha("Projeção com +10 pp (2035)", f"{_fmt(hidro_44_twh,2)} TWh", "44% da demanda futura")}'
+            f'<div style="display:flex;align-items:center;gap:8px;margin-top:10px;">'
+            f'<div style="background:{HYD}22;border:1px solid {HYD}44;border-radius:10px;padding:8px 14px;flex:1;text-align:center;">'
+            f'<div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;">Margem de expansão</div>'
+            f'<div style="font-size:18px;font-weight:800;color:{HYD};">+{_fmt(margem_twh,2)} TWh</div>'
+            f'<div style="font-size:11px;color:{TEXT_SEC};">ao longo de 10 anos</div>'
+            f'</div></div></div>',
+            unsafe_allow_html=True,
+        )
+
+    with col_t:
+        st.markdown(
+            f'<div style="{css_bloco}">'
+            f'{_badge(THR, "🔥", "Termo")}'
+            f'{_linha("Participação atual (BEN 2026)", "55 %", "da matriz")}'
+            f'<div style="margin-top:12px;padding:12px;background:#fff7f7;border:1px solid #fecaca;'
+            f'border-radius:10px;font-size:12px;color:#7f1d1d;line-height:1.65;">'
+            f'O potencial termelétrico <b>depende da política energética</b>. '
+            f'Reduzir, pressionar, abandonar ou aumentar a participação da térmica são '
+            f'<b>decisões estratégicas</b>, uma vez que consideramos a entrada de combustível '
+            f'como estável. Não há limite geográfico — o teto é político e econômico.'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.caption("Análise detalhada de cada fonte disponível nas abas 🌬️ Eólica · ☀️ Solar · 💧 Hidro · 🔥 Termo")
 
 
 # =======================================================================
@@ -420,6 +532,34 @@ def tab_eolica(socio: dict):
     section_title("Potencial Eólico",
                   "Recurso e produção por turbina · Global Wind Atlas (10% das áreas mais ventosas)")
 
+    # ── KPIs de AEP por turbina (resultado principal, topo) ───────
+    st.markdown(
+        f'<div style="font-size:11px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">⚡ AEP médio/turbina · 10% da área mais ventosa</div>',
+        unsafe_allow_html=True,
+    )
+    aep_cols = st.columns(4)
+    for col, t in zip(aep_cols, TURBINES):
+        r = read_aep_tif(t["tif"])
+        if "stats" in r:
+            aep = r["stats"]["mean"]
+            cf  = aep * 1e6 / (t["p_kw"] * 8760)
+            if cf > 0.75:
+                aep = aep / 1000
+            label_curto = t["nome"].split("·")[0].strip()
+            col.markdown(
+                kpi_card(label_curto, f"{_fmt(aep,1)}", "GWh/ano", WIN),
+                unsafe_allow_html=True,
+            )
+        else:
+            col.markdown(
+                kpi_card(t["nome"].split("·")[0].strip(), "—", ".tif não encontrado"),
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    st.markdown("---")
+
     # ── KPIs do recurso (números reais do GWA) ────────────────────
     k1, k2, k3, k4 = st.columns(4)
     k1.markdown(kpi_card("Densidade de potência", f"{_fmt(WIND_PD_10PCT)}", f"W/m² · 10% mais ventoso", WIN), unsafe_allow_html=True)
@@ -476,18 +616,46 @@ def tab_solar(socio: dict, gsa: dict):
     section_title("Potencial Solar",
                   "Recurso medido pelo Global Solar Atlas para a área do país (12.000 km²)")
 
-    st.markdown(
-        '<a href="https://globalsolaratlas.info/" target="_blank" style="text-decoration:none;">'
-        f'<div style="display:inline-block;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);'
-        f'color:#b45309;padding:8px 16px;border-radius:10px;font-weight:600;font-size:13px;margin-bottom:10px;">'
-        f'☀️ Dados oficiais do Global Solar Atlas (GSA_Report_UTOPIA.xlsx)</div></a>',
-        unsafe_allow_html=True,
-    )
-
-    # ── KPIs do recurso (médias do GSA) ───────────────────────────
+    # ── def avg local ──────────────────────────────────────────────
     def avg(k):
         return gsa.get(k, {}).get("stats", {}).get("Average")
 
+    # ── Resultados principais em destaque (topo) ──────────────────
+    st.markdown(
+        f'<div style="font-size:11px;font-weight:700;color:{TEXT_SEC};text-transform:uppercase;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">☀️ Indicadores principais do recurso solar</div>',
+        unsafe_allow_html=True,
+    )
+    hero1, hero2, spacer1, spacer2 = st.columns([1, 1, 0.6, 0.6])
+
+    # GTI — hero card maior
+    gti_val = avg("GTI") or 5.03
+    pvout_val = avg("PVOUT") or 4.00
+    hero_css = ("background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1.5px solid #fcd34d;"
+                "border-radius:16px;padding:18px 22px;box-shadow:0 4px 16px rgba(245,158,11,0.12);")
+    hero1.markdown(
+        f'<div style="{hero_css}">'
+        f'<div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">GTI — Irradiação inclinada ótima</div>'
+        f'<div style="font-size:36px;font-weight:900;color:{SOL};letter-spacing:-1px;line-height:1.1;">{gti_val:.2f}</div>'
+        f'<div style="font-size:13px;color:#78350f;font-weight:600;">kWh/m²/dia</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    hero2.markdown(
+        f'<div style="{hero_css}">'
+        f'<div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">PVOUT — Produção fotovoltaica</div>'
+        f'<div style="font-size:36px;font-weight:900;color:#d97706;letter-spacing:-1px;line-height:1.1;">{pvout_val:.2f}</div>'
+        f'<div style="font-size:13px;color:#78350f;font-weight:600;">kWh/kWp/dia</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    spacer1.markdown(kpi_card("Inclinação ótima", f"{_fmt(avg('OPTA') or 15,0)}°", "dos módulos"), unsafe_allow_html=True)
+    spacer2.markdown(kpi_card("Temperatura média", f"{_fmt(avg('TEMP') or 24.4,1)} °C", "do ar"), unsafe_allow_html=True)
+
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # ── KPIs do recurso (médias do GSA) ───────────────────────────
     r1 = st.columns(4)
     r1[0].markdown(kpi_card("GHI (horizontal global)", f"{_fmt(avg('GHI'),2)}", "kWh/m²/dia", SOL), unsafe_allow_html=True)
     r1[1].markdown(kpi_card("DNI (normal direta)", f"{_fmt(avg('DNI'),2)}", "kWh/m²/dia", SOL), unsafe_allow_html=True)
@@ -565,73 +733,145 @@ def tab_solar(socio: dict, gsa: dict):
 # =======================================================================
 def tab_hidro(socio: dict):
     section_title("Potencial Hidrelétrico",
-                  "Participação atual na matriz e margem de expansão permitida para o PDE 2035")
+                  "Participação atual na matriz e margem de expansão para o PDE 2035")
 
-    st.info(f"No **BEN 2025** a hidroeletricidade respondeu por **{HIDRO_SHARE_2025*100:.0f}%** da matriz. "
-            f"O PDE 2035 permite um acréscimo de até **+10 pontos percentuais** "
-            f"(de 40% para 50%) ao longo de 10 anos.")
-
-    with st.expander("⚙️  Premissas do cenário", expanded=True):
-        c1, c2 = st.columns(2)
-        teto = c1.slider("Teto de participação da hidro em 2035 (%)", 40, 60, 50, key="h_teto") / 100
-        dem_2035 = c2.number_input(
-            "Demanda projetada para 2035 (MWh)",
-            min_value=float(socio["ee"]) * 0.5,
-            value=float(socio["ee"]),
-            step=float(socio["ee"]) * 0.01,
-            key="h_dem",
-            help="Por padrão usa o consumo de 2025. Substitua pela demanda projetada da seção Previsão Decenal.",
-        )
-
-    hidro_2025 = HIDRO_SHARE_2025 * socio["ee"]       # MWh hoje
-    hidro_2035 = teto * dem_2035                        # MWh teto
-    margem = hidro_2035 - hidro_2025                     # MWh adicionais
+    hidro_2025 = HIDRO_SHARE_2025 * socio["ee"]    # MWh hoje      (40%)
+    TETO_HIDRO = 0.44                               # teto fixo: +10% relativo sobre 40%
+    hidro_2035 = TETO_HIDRO * socio["ee"]           # MWh teto 2035 (projeção p/ mesma demanda)
+    margem     = hidro_2035 - hidro_2025
     margem_pct = (margem / hidro_2025 * 100) if hidro_2025 else 0
+    outros_2025 = socio["ee"] * 0.05               # 5% restante da matriz 2025
 
+    # ── KPIs principais ───────────────────────────────────────────
     k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Participação 2025", "40 %", "do BEN", HYD), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Geração hidro 2025", f"{_fmt(hidro_2025/1e6,2)} TWh", f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Teto hidro 2035", f"{_fmt(hidro_2035/1e6,2)} TWh", f"a {teto*100:.0f}% da demanda", ACCENT_D), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Margem de expansão", f"+{_fmt(margem/1e6,2)} TWh", f"+{_fmt(margem_pct,1)}% vs. 2025", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+    k1.markdown(kpi_card("Participação atual (2025)", "40 %", "do BEN · base para projeção", HYD), unsafe_allow_html=True)
+    k2.markdown(kpi_card("Geração hidro 2025", f"{_fmt(hidro_2025/1e6,2)} TWh", f"{_fmt(hidro_2025)} MWh/ano", HYD), unsafe_allow_html=True)
+    k3.markdown(kpi_card("Projeção 2035 (+10%)", f"{_fmt(hidro_2035/1e6,2)} TWh", f"44% da demanda futura · {_fmt(hidro_2035)} MWh", ACCENT_D), unsafe_allow_html=True)
+    k4.markdown(kpi_card("Margem de expansão", f"+{_fmt(margem/1e6,3)} TWh", f"+{_fmt(margem_pct,1)}% em relação a 2025", WIN), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    g1, g2 = st.columns(2)
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    g1, g2, g3 = st.columns(3)
 
+    # Gráfico 1 — barras 2025 vs 2035
     with g1:
-        fig = base_fig("Geração hidrelétrica: hoje vs. teto 2035")
+        fig = base_fig("Geração hidrelétrica: 2025 → 2035", height=300)
         fig.add_trace(go.Bar(
-            x=["Hidro 2025", "Teto hidro 2035"], y=[hidro_2025, hidro_2035],
+            x=["Hidro 2025", "Projeção 2035"],
+            y=[hidro_2025, hidro_2035],
             marker_color=["#93c5fd", HYD],
             text=[f"{hidro_2025/1e6:.2f} TWh", f"{hidro_2035/1e6:.2f} TWh"],
-            textposition="outside", hovertemplate="%{y:,.0f} MWh<extra></extra>",
+            textposition="outside",
+            hovertemplate="%{y:,.0f} MWh<extra></extra>",
         ))
         fig.update_layout(yaxis_title="MWh/ano", showlegend=False)
         st.plotly_chart(fig, use_container_width=True, key="h_bar")
 
+    # Gráfico 2 — gauge participação
     with g2:
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
-            value=teto * 100,
-            delta={"reference": HIDRO_SHARE_2025 * 100, "suffix": " pp", "increasing": {"color": WIN}},
-            number={"suffix": " %", "font": {"size": 40}},
-            title={"text": "Participação da hidro na matriz", "font": {"size": 13}},
+            value=TETO_HIDRO * 100,
+            delta={"reference": HIDRO_SHARE_2025 * 100, "suffix": " pp",
+                   "increasing": {"color": HYD}, "font": {"size": 14}},
+            number={"suffix": " %", "font": {"size": 44, "color": HYD}},
+            title={"text": "Participação hidro na matriz", "font": {"size": 13, "color": TEXT_PRI}},
             gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1},
-                "bar": {"color": HYD},
+                "axis": {"range": [0, 60], "tickwidth": 1,
+                         "tickvals": [0, 10, 20, 30, 40, 44, 50, 60],
+                         "ticktext": ["0", "10", "20", "30", "40", "<b>44</b>", "50", "60"]},
+                "bar": {"color": HYD, "thickness": 0.28},
+                "bgcolor": "#f0f9ff",
                 "steps": [
                     {"range": [0, 40], "color": "#e0f2fe"},
-                    {"range": [40, 50], "color": "#bae6fd"},
-                    {"range": [50, 100], "color": "#f1f5f9"},
+                    {"range": [40, 44], "color": "#bae6fd"},
+                    {"range": [44, 60], "color": "#f1f5f9"},
                 ],
-                "threshold": {"line": {"color": THR, "width": 3}, "value": 50},
+                "threshold": {"line": {"color": ACCENT_D, "width": 3}, "value": 44},
             },
         ))
-        fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=10),
+        fig.update_layout(height=300, margin=dict(l=20, r=20, t=60, b=10),
                           paper_bgcolor=BG_CHART, font=dict(color=TEXT_PRI))
         st.plotly_chart(fig, use_container_width=True, key="h_gauge")
 
-    st.caption("Interpretação: a regra de **+10% em 10 anos** é tratada aqui como +10 pontos percentuais "
-               "(40% → 50%). Se a leitura correta for +10% relativo, o teto seria 44%; ajuste o slider acima.")
+    # Gráfico 3 — composição da matriz 2025 (pizza)
+    with g3:
+        fig = go.Figure(go.Pie(
+            labels=["Hidro (40%)", "Termo (55%)", "Outros (5%)"],
+            values=[hidro_2025, socio["ee"] * 0.55, outros_2025],
+            marker_colors=[HYD, THR, "#94a3b8"],
+            hole=0.52,
+            textinfo="label+percent",
+            textfont=dict(size=11),
+            hovertemplate="%{label}<br>%{value:,.0f} MWh<extra></extra>",
+            pull=[0.04, 0, 0],
+        ))
+        fig.update_layout(
+            title=dict(text="Composição da matriz 2025", font=dict(size=13, color=TEXT_PRI, weight="bold"), x=0),
+            height=300, showlegend=False,
+            margin=dict(l=10, r=10, t=46, b=10),
+            paper_bgcolor=BG_CHART,
+        )
+        st.plotly_chart(fig, use_container_width=True, key="h_pie")
+
+    # Linha adicional — variação anual necessária
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    cr1, cr2 = st.columns(2)
+
+    with cr1:
+        # Progressão da meta 40→44% em 10 anos
+        anos = list(range(2025, 2036))
+        participacoes = [40 + i * 0.4 for i in range(11)]   # linear 40→44%
+        mwh_anual = [p / 100 * socio["ee"] for p in participacoes]
+        fig = base_fig("Trajetória de expansão da hidro (2025–2035)", height=280)
+        fig.add_trace(go.Scatter(
+            x=anos, y=mwh_anual, mode="lines+markers",
+            line=dict(color=HYD, width=2.5, dash="dot"),
+            marker=dict(size=6, color=HYD),
+            fill="tozeroy", fillcolor="rgba(14,165,233,0.07)",
+            hovertemplate="<b>%{x}</b>: %{y:,.0f} MWh<extra></extra>",
+            name="Geração hidro"
+        ))
+        fig.add_trace(go.Scatter(
+            x=[2025, 2035], y=[hidro_2025, hidro_2025],
+            mode="lines", line=dict(color="#94a3b8", dash="dash", width=1),
+            name="Base 2025", hoverinfo="skip",
+        ))
+        fig.update_layout(yaxis_title="MWh/ano", xaxis=dict(tickvals=anos, tickfont=dict(size=10)))
+        st.plotly_chart(fig, use_container_width=True, key="h_traj")
+
+    with cr2:
+        # Incremento anual médio necessário
+        incremento_anual = margem / 10
+        incremento_pct = margem_pct / 10
+        css_info = ("background:#f0f9ff;border:1px solid #bae6fd;border-radius:14px;"
+                    "padding:20px 22px;height:100%;box-sizing:border-box;")
+        st.markdown(
+            f'<div style="{css_info}">'
+            f'<div style="font-size:12px;font-weight:700;color:{HYD};text-transform:uppercase;'
+            f'letter-spacing:0.05em;margin-bottom:14px;">📐 Detalhamento da meta</div>'
+            f'<div style="display:grid;gap:10px;">'
+
+            f'<div style="background:#fff;border:1px solid #e0f2fe;border-radius:10px;padding:10px 14px;">'
+            f'<div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Base de cálculo</div>'
+            f'<div style="font-size:15px;font-weight:700;color:{TEXT_PRI};">40% → 44% da demanda</div>'
+            f'<div style="font-size:11px;color:{TEXT_SEC};">+10% relativo sobre participação atual</div></div>'
+
+            f'<div style="background:#fff;border:1px solid #e0f2fe;border-radius:10px;padding:10px 14px;">'
+            f'<div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Incremento anual médio</div>'
+            f'<div style="font-size:15px;font-weight:700;color:{HYD};">+{_fmt(incremento_anual/1e3,1)} GWh/ano</div>'
+            f'<div style="font-size:11px;color:{TEXT_SEC};">≈ +{_fmt(incremento_pct,2)}% da geração hidro/ano</div></div>'
+
+            f'<div style="background:#fff;border:1px solid #e0f2fe;border-radius:10px;padding:10px 14px;">'
+            f'<div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Expansão total 2025–2035</div>'
+            f'<div style="font-size:15px;font-weight:700;color:{ACCENT_D};">+{_fmt(margem/1e6,3)} TWh</div>'
+            f'<div style="font-size:11px;color:{TEXT_SEC};">{_fmt(margem)} MWh adicionais em 10 anos</div></div>'
+
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.caption("Teto de 44% = +10% relativo sobre os 40% do BEN 2025, projetado para a mesma demanda base de 2025. "
+               "Se a demanda crescer (ver Previsão Decenal), a geração hidro necessária sobe proporcionalmente.")
 
 
 # =======================================================================
@@ -639,12 +879,7 @@ def tab_hidro(socio: dict):
 # =======================================================================
 def tab_termo(socio: dict):
     section_title("Potencial Termelétrico",
-                  "Participação atual e como tratar a expansão térmica no planejamento")
-
-    st.info(f"No **BEN 2026** a geração térmica respondeu por **{TERMO_SHARE_2026*100:.0f}%** da matriz. "
-            "Diferente de sol, vento e hidro, a térmica não é um recurso natural com fluxo fixo: "
-            "seu 'potencial' é definido por **disponibilidade de combustível, custo e metas de emissão**, "
-            "não pela geografia.")
+                  "Participação atual e cenário de transição para o PDE 2035")
 
     with st.expander("⚙️  Cenário de participação térmica em 2035", expanded=True):
         c1, c2 = st.columns(2)
@@ -670,8 +905,8 @@ def tab_termo(socio: dict):
     k4.markdown(kpi_card("Variação vs. 2026", f"{'+' if var>=0 else ''}{_fmt(var/1e6,2)} TWh",
                          f"{'+' if var_pct>=0 else ''}{_fmt(var_pct,1)}%", THR if var > 0 else WIN), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    g1, g2 = st.columns([1, 1.1])
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    g1, g2 = st.columns([1.1, 1], gap="large")
 
     with g1:
         fig = base_fig("Geração térmica: 2026 vs. cenário 2035")
@@ -685,25 +920,33 @@ def tab_termo(socio: dict):
         st.plotly_chart(fig, use_container_width=True, key="t_bar")
 
     with g2:
-        st.markdown("##### 📝 Como descrever o potencial térmico no relatório")
+        direcoes = [
+            ("⬇️ Reduzir",   "#10b981", "Priorizar renováveis; térmica recua para backup de pico."),
+            ("⚖️ Pressionar", "#f59e0b", "Manter participação como segurança de suprimento."),
+            ("🚫 Abandonar",  "#0ea5e9", "Eliminar gradual via fontes limpas (>10 anos)."),
+            ("⬆️ Aumentar",   "#ef4444", "Atender crescimento rápido de carga com segurança imediata."),
+        ]
+        css_dir = ("background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;"
+                   "padding:16px 18px;")
         st.markdown(
-            f"""
-- **Papel de segurança e firmeza:** a térmica é a capacidade **despachável** que garante o
-  atendimento quando sol e vento não estão disponíveis. Seu valor no PDE é dado pela
-  **potência firme** que oferece, não por um limite geográfico.
-- **Limitado por combustível e emissões:** o teto da térmica vem da **disponibilidade e custo
-  do combustível** (gás, óleo, biomassa) e das **metas de descarbonização**, não do território.
-- **Tendência esperada:** num plano decenal com expansão de solar e eólica, a participação
-  térmica de **55% tende a recuar** em termos relativos, mesmo que a potência instalada se
-  mantenha como reserva. Ela passa de "base" para "complemento/backup".
-- **Métrica recomendada:** em vez de "potencial técnico" (como sol/vento), reporte a
-  térmica pela **capacidade firme disponível** e pelo **fator de capacidade de operação**
-  (tipicamente baixo, pois opera na ponta e em complementação).
-            """
+            f'<div style="{css_dir}">'
+            f'<div style="font-size:11px;font-weight:700;color:#7c2d12;text-transform:uppercase;'
+            f'letter-spacing:0.05em;margin-bottom:12px;">🏛️ O potencial depende da política energética</div>'
+            + "".join(
+                f'<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:9px;">'
+                f'<span style="min-width:90px;font-size:12px;font-weight:700;color:{cor};">{icone}</span>'
+                f'<span style="font-size:12px;color:{TEXT_PRI};line-height:1.5;">{desc}</span></div>'
+                for icone, cor, desc in direcoes
+            )
+            + f'<div style="margin-top:10px;padding-top:10px;border-top:1px solid #fed7aa;'
+            f'font-size:11px;color:#92400e;line-height:1.5;">'
+            f'Considerando o <b>suprimento de combustível estável</b>, reduzir, pressionar, '
+            f'abandonar ou aumentar são <b>decisões estratégicas</b>, não limites físicos.'
+            f'</div></div>',
+            unsafe_allow_html=True,
         )
 
-    st.caption("Diferente das renováveis, o eixo da térmica é decisão de política e economia de combustível. "
-               "Use o slider para mostrar o cenário de transição que o PDE 2035 adota.")
+    st.caption(f"Participação de 55% no BEN 2026. Use o slider para projetar o papel da térmica no PDE 2035.")
 
 
 # =======================================================================
