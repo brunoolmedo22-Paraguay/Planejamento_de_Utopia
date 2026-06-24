@@ -6,18 +6,25 @@ from pathlib import Path
 # Usar Path(__file__).parent garante que os assets são encontrados
 # independente de onde o app é rodado — portátil entre máquinas.
 ROOT  = Path(__file__).parent
-ASSETS = ROOT / "assets"
 
 def img_b64(filename: str) -> str:
-    """Lê uma imagem da pasta assets e retorna como data-URI base64."""
-    p = ASSETS / filename
+    p = ROOT / filename
+
     if not p.exists():
+        print(f"Imagem não encontrada: {p}")
         return ""
+
     ext = p.suffix.lower().lstrip(".")
-    mime = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "gif": "gif", "webp": "webp"}.get(ext, "png")
+    mime = {
+        "jpg": "jpeg",
+        "jpeg": "jpeg",
+        "png": "png",
+        "gif": "gif",
+        "webp": "webp"
+    }.get(ext, "png")
+
     data = base64.b64encode(p.read_bytes()).decode()
     return f"data:image/{mime};base64,{data}"
-
 # =========================================================
 # CONFIG
 # =========================================================
