@@ -76,7 +76,7 @@ THEME = dict(
 # =======================================================================
 #  LEITURA DE DADOS
 # =======================================================================
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_data(cidade: str, excel_path: str) -> pd.DataFrame:
     sheet = SHEET_MAP[cidade]
     df = pd.read_excel(excel_path, sheet_name=sheet, header=0)
