@@ -6,3 +6,5 @@ openpyxl
 xlsxwriter
 matplotlib
 scipy
+rasterio
+tifffile
