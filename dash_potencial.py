@@ -320,6 +320,46 @@ def tab_geolocalizacao(socio: dict):
         s3.markdown(kpi_card("Consumo EE 2025", f"{_fmt(socio['ee'])}", "MWh/ano", "#7c3aed"), unsafe_allow_html=True)
 
     st.markdown("---")
+
+    # ── Resumo do potencial por fonte ─────────────────────────────
+    st.markdown(
+        f'<h3 style="font-size:16px;font-weight:700;color:{TEXT_PRI};margin:0 0 14px;">'        'Resumo do Estudo de Potencial Energético</h3>',
+        unsafe_allow_html=True,
+    )
+
+    # Row 1 — Eólica + Solar
+    r1c1, r1c2 = st.columns(2, gap="large")
+
+    with r1c1:
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:16px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#047857;margin-bottom:10px;">🌬️ Eólica</div>'            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">AEP médio (4,0 MW Class 1)</div><div style="font-size:16px;font-weight:700;color:#10b981;">18,8 GWh/ano</div></div>'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">AEP médio (4,5 MW Class 2)</div><div style="font-size:16px;font-weight:700;color:#10b981;">~AEP tif</div></div>'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Densidade de potência</div><div style="font-size:16px;font-weight:700;color:#047857;">712 W/m²</div></div>'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Velocidade média</div><div style="font-size:16px;font-weight:700;color:#047857;">9,98 m/s</div></div>'            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    with r1c2:
+        st.markdown(
+            f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#b45309;margin-bottom:10px;">☀️ Solar</div>'            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">GTI (inclinada ótima)</div><div style="font-size:16px;font-weight:700;color:{SOL};">5,03 kWh/m²/dia</div></div>'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">PVOUT (produção FV)</div><div style="font-size:16px;font-weight:700;color:#d97706;">4,00 kWh/kWp/dia</div></div>'            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Row 2 — Hidro + Termo
+    r2c1, r2c2 = st.columns(2, gap="large")
+
+    with r2c1:
+        st.markdown(
+            f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:16px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#1d4ed8;margin-bottom:10px;">💧 Hidro</div>'            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Participação 2025</div><div style="font-size:16px;font-weight:700;color:{HYD};">44 %</div></div>'            f'<div><div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Projeção máxima 2035</div><div style="font-size:16px;font-weight:700;color:{ACCENT_D};">+ 10 pp</div></div>'            f'<div style="grid-column:1/-1;font-size:11px;color:{TEXT_SEC};margin-top:4px;">Margem de expansão: até +10 pontos percentuais ao longo da década.</div>'            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    with r2c2:
+        st.markdown(
+            f'<div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:16px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px;">🔥 Térmica</div>'            f'<div style="font-size:12px;color:{TEXT_SEC};line-height:1.6;">'            f'O potencial termelétrico depende da <strong>política energética</strong>. '            f'O interesse em <em>reduzir, pressionar, abandonar, aumentar</em> são decisões estratégicas — '            f'uma vez que consideramos a entrada de combustível como estável, '            f'a térmica é definida por escolha, não por recurso.'            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     st.caption("As dimensões definem a área de referência (12.000 km²) usada nas estimativas de potencial "
                "solar e eólico das abas seguintes.")
 
@@ -420,6 +460,12 @@ def tab_eolica(socio: dict):
     section_title("Potencial Eólico",
                   "Recurso e produção por turbina · Global Wind Atlas (10% das áreas mais ventosas)")
 
+    # ── AEP médio das 4 turbinas (resultado principal) ────────────
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;'        f'border-radius:14px;padding:12px 18px;margin-bottom:14px;">'        f'<div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;'        f'letter-spacing:0.06em;margin-bottom:8px;">⚡ AEP Médio por Turbina — resultado principal</div>'        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,0 MW · Class 1</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,5 MW · Class 2</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,5 MW · Class 3</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">15,0 MW · Offshore</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
     # ── KPIs do recurso (números reais do GWA) ────────────────────
     k1, k2, k3, k4 = st.columns(4)
     k1.markdown(kpi_card("Densidade de potência", f"{_fmt(WIND_PD_10PCT)}", f"W/m² · 10% mais ventoso", WIN), unsafe_allow_html=True)
@@ -475,6 +521,25 @@ def tab_eolica(socio: dict):
 def tab_solar(socio: dict, gsa: dict):
     section_title("Potencial Solar",
                   "Recurso medido pelo Global Solar Atlas para a área do país (12.000 km²)")
+
+    # ── Banner resultado principal ────────────────────────────────
+    st.markdown(
+        f'<div style="background:linear-gradient(135deg,#fffbeb,#fef9c3);border:1px solid #fde68a;'
+        f'border-radius:14px;padding:12px 18px;margin-bottom:14px;">'
+        f'<div style="font-size:11px;font-weight:700;color:#b45309;text-transform:uppercase;'
+        f'letter-spacing:0.06em;margin-bottom:8px;">☀️ Resultado Principal — Global Solar Atlas</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">GTI · Irradiação inclinada ótima</div>'
+        f'<div style="font-size:28px;font-weight:800;color:{SOL};">5,03</div>'
+        f'<div style="font-size:12px;color:{TEXT_SEC};font-weight:600;">kWh/m²/dia</div></div>'
+        f'<div style="text-align:center;">'
+        f'<div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">PVOUT · Produção fotovoltaica específica</div>'
+        f'<div style="font-size:28px;font-weight:800;color:#d97706;">4,00</div>'
+        f'<div style="font-size:12px;color:{TEXT_SEC};font-weight:600;">kWh/kWp/dia</div></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
     st.markdown(
         '<a href="https://globalsolaratlas.info/" target="_blank" style="text-decoration:none;">'
@@ -567,13 +632,11 @@ def tab_hidro(socio: dict):
     section_title("Potencial Hidrelétrico",
                   "Participação atual na matriz e margem de expansão permitida para o PDE 2035")
 
-    st.info(f"No **BEN 2025** a hidroeletricidade respondeu por **{HIDRO_SHARE_2025*100:.0f}%** da matriz. "
-            f"O PDE 2035 permite um acréscimo de até **+10 pontos percentuais** "
-            f"(de 40% para 50%) ao longo de 10 anos.")
+    HIDRO_SHARE_REAL = 0.44   # participação real confirmada
 
     with st.expander("⚙️  Premissas do cenário", expanded=True):
         c1, c2 = st.columns(2)
-        teto = c1.slider("Teto de participação da hidro em 2035 (%)", 40, 60, 50, key="h_teto") / 100
+        teto = c1.slider("Teto de participação da hidro em 2035 (%)", 44, 60, 54, key="h_teto") / 100
         dem_2035 = c2.number_input(
             "Demanda projetada para 2035 (MWh)",
             min_value=float(socio["ee"]) * 0.5,
@@ -583,16 +646,25 @@ def tab_hidro(socio: dict):
             help="Por padrão usa o consumo de 2025. Substitua pela demanda projetada da seção Previsão Decenal.",
         )
 
-    hidro_2025 = HIDRO_SHARE_2025 * socio["ee"]       # MWh hoje
-    hidro_2035 = teto * dem_2035                        # MWh teto
-    margem = hidro_2035 - hidro_2025                     # MWh adicionais
+    hidro_2025 = HIDRO_SHARE_REAL * socio["ee"]        # MWh hoje (44%)
+    hidro_2035 = teto * dem_2035                         # MWh teto
+    margem = hidro_2035 - hidro_2025
     margem_pct = (margem / hidro_2025 * 100) if hidro_2025 else 0
+    fch = (hidro_2025 / (socio["ee"] or 1)) * 100       # fator de contribuição atual
+    pp_expansao = teto * 100 - HIDRO_SHARE_REAL * 100   # pontos percentuais de expansão
 
     k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Participação 2025", "40 %", "do BEN", HYD), unsafe_allow_html=True)
+    k1.markdown(kpi_card("Participação 2025", f"{HIDRO_SHARE_REAL*100:.0f} %", "do BEN 2025", HYD), unsafe_allow_html=True)
     k2.markdown(kpi_card("Geração hidro 2025", f"{_fmt(hidro_2025/1e6,2)} TWh", f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
     k3.markdown(kpi_card("Teto hidro 2035", f"{_fmt(hidro_2035/1e6,2)} TWh", f"a {teto*100:.0f}% da demanda", ACCENT_D), unsafe_allow_html=True)
     k4.markdown(kpi_card("Margem de expansão", f"+{_fmt(margem/1e6,2)} TWh", f"+{_fmt(margem_pct,1)}% vs. 2025", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+
+    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+    k5, k6, k7, k8 = st.columns(4)
+    k5.markdown(kpi_card("Expansão possível", f"+{_fmt(pp_expansao,1)} pp", "pontos percentuais até 2035", ACCENT), unsafe_allow_html=True)
+    k6.markdown(kpi_card("Contribuição atual", f"{_fmt(fch,1)} %", "da demanda total coberta", "#1d4ed8"), unsafe_allow_html=True)
+    k7.markdown(kpi_card("Energia add. possível", f"{_fmt(margem/1e3,0)} GWh", "acréscimo até o teto", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+    k8.markdown(kpi_card("Fator de firmeza", "Alto", "fonte despachável 24/7", HYD), unsafe_allow_html=True)
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
     g1, g2 = st.columns(2)
@@ -612,26 +684,26 @@ def tab_hidro(socio: dict):
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
             value=teto * 100,
-            delta={"reference": HIDRO_SHARE_2025 * 100, "suffix": " pp", "increasing": {"color": WIN}},
+            delta={"reference": HIDRO_SHARE_REAL * 100, "suffix": " pp", "increasing": {"color": WIN}},
             number={"suffix": " %", "font": {"size": 40}},
             title={"text": "Participação da hidro na matriz", "font": {"size": 13}},
             gauge={
                 "axis": {"range": [0, 100], "tickwidth": 1},
                 "bar": {"color": HYD},
                 "steps": [
-                    {"range": [0, 40], "color": "#e0f2fe"},
-                    {"range": [40, 50], "color": "#bae6fd"},
-                    {"range": [50, 100], "color": "#f1f5f9"},
+                    {"range": [0, 44], "color": "#e0f2fe"},
+                    {"range": [44, 54], "color": "#bae6fd"},
+                    {"range": [54, 100], "color": "#f1f5f9"},
                 ],
-                "threshold": {"line": {"color": THR, "width": 3}, "value": 50},
+                "threshold": {"line": {"color": THR, "width": 3}, "value": 54},
             },
         ))
         fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=10),
                           paper_bgcolor=BG_CHART, font=dict(color=TEXT_PRI))
         st.plotly_chart(fig, use_container_width=True, key="h_gauge")
 
-    st.caption("Interpretação: a regra de **+10% em 10 anos** é tratada aqui como +10 pontos percentuais "
-               "(40% → 50%). Se a leitura correta for +10% relativo, o teto seria 44%; ajuste o slider acima.")
+    st.caption("Participação base: 44% (BEN 2025). O teto de expansão é ajustável no slider acima. "
+               "A hidro é a única fonte renovável firmemente despachável do país — seu papel na segurança energética vai além da participação percentual.")
 
 
 # =======================================================================
@@ -641,10 +713,7 @@ def tab_termo(socio: dict):
     section_title("Potencial Termelétrico",
                   "Participação atual e como tratar a expansão térmica no planejamento")
 
-    st.info(f"No **BEN 2026** a geração térmica respondeu por **{TERMO_SHARE_2026*100:.0f}%** da matriz. "
-            "Diferente de sol, vento e hidro, a térmica não é um recurso natural com fluxo fixo: "
-            "seu 'potencial' é definido por **disponibilidade de combustível, custo e metas de emissão**, "
-            "não pela geografia.")
+
 
     with st.expander("⚙️  Cenário de participação térmica em 2035", expanded=True):
         c1, c2 = st.columns(2)
@@ -685,25 +754,13 @@ def tab_termo(socio: dict):
         st.plotly_chart(fig, use_container_width=True, key="t_bar")
 
     with g2:
-        st.markdown("##### 📝 Como descrever o potencial térmico no relatório")
         st.markdown(
-            f"""
-- **Papel de segurança e firmeza:** a térmica é a capacidade **despachável** que garante o
-  atendimento quando sol e vento não estão disponíveis. Seu valor no PDE é dado pela
-  **potência firme** que oferece, não por um limite geográfico.
-- **Limitado por combustível e emissões:** o teto da térmica vem da **disponibilidade e custo
-  do combustível** (gás, óleo, biomassa) e das **metas de descarbonização**, não do território.
-- **Tendência esperada:** num plano decenal com expansão de solar e eólica, a participação
-  térmica de **55% tende a recuar** em termos relativos, mesmo que a potência instalada se
-  mantenha como reserva. Ela passa de "base" para "complemento/backup".
-- **Métrica recomendada:** em vez de "potencial técnico" (como sol/vento), reporte a
-  térmica pela **capacidade firme disponível** e pelo **fator de capacidade de operação**
-  (tipicamente baixo, pois opera na ponta e em complementação).
-            """
+            f'<div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px;">🔥 Natureza do Potencial Térmico</div>'            f'<div style="font-size:13px;color:{TEXT_SEC};line-height:1.7;">'            f'O potencial termelétrico depende da <strong style="color:{TEXT_PRI};">política energética</strong>.<br/>'            f'O interesse em <em>reduzir, pressionar, abandonar, aumentar</em> são <strong style="color:{TEXT_PRI};">decisões estratégicas</strong> — '            f'uma vez que consideramos a entrada de combustível como estável, a térmica é definida por escolha, não por recurso geográfico.'            f'<br/><br/>Ela ocupa o papel de <strong style="color:{TEXT_PRI};">firmeza e segurança</strong> do sistema: '            f'entra quando sol, vento e hidro não são suficientes. '            f'No planejamento decenal, a tendência é que a participação relativa <em>recue</em> com a expansão de renováveis, '            f'mesmo mantendo a capacidade instalada como reserva.'            f'</div></div>',
+            unsafe_allow_html=True,
         )
 
-    st.caption("Diferente das renováveis, o eixo da térmica é decisão de política e economia de combustível. "
-               "Use o slider para mostrar o cenário de transição que o PDE 2035 adota.")
+    st.caption("Use o slider para explorar diferentes cenários de transição energética. "
+               "A térmica é o único recurso do sistema definido por política — não por recurso natural.")
 
 
 # =======================================================================
