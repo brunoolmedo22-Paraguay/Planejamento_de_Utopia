@@ -100,7 +100,7 @@ PLOTLY_THEME = dict(
 # ═══════════════════════════════════════════════════════════════════════
 #  LEITURA DE DADOS
 # ═══════════════════════════════════════════════════════════════════════
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_proj(csv_path: str) -> pd.DataFrame:
     """CSV exportado pelo MATLAB — projeções 2026–2035."""
     df = pd.read_csv(csv_path)
@@ -110,7 +110,7 @@ def load_proj(csv_path: str) -> pd.DataFrame:
     return df
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_hist(cidade: str, excel_path: str) -> pd.DataFrame:
     """
     Lê aba histórica do Excel (mesma lógica do dash_historico).
