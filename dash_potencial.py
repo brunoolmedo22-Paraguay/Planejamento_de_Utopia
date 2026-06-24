@@ -662,161 +662,124 @@ def tab_solar(socio: dict, gsa: dict):
 # =======================================================================
 def tab_hidro(socio: dict):
     section_title("Potencial Hidrelétrico",
-                  "Participação atual e projeção da geração hidrelétrica até 2035")
+                  "Participação atual e projeção da geração hidrelétrica até 2035 — 3 cenários")
 
-    # ── Constantes fixas ──────────────────────────────────────────
-    HIDRO_2025_PCT  = 0.40   # participação real BEN 2025
-    HIDRO_2035_PCT  = 0.44   # teto de participação 2035 (fixo)
-    CSV_PROJ        = str(ROOT / "projecoes_demanda.csv")
+    HIDRO_2025_PCT = 0.40
+    HIDRO_2035_PCT = 0.44
 
-    # ── Demanda 2035 cenário Baixo (conservador) — lida do CSV ────
-    dem_2035 = None
-    try:
-        df_proj = pd.read_csv(CSV_PROJ)
-        df_proj["Ano"] = df_proj["Ano"].astype(int)
-        row_2035 = df_proj[
-            (df_proj["Ano"] == 2035) &
-            (df_proj["Cenario"] == "Baixo") &
-            (df_proj["Local"] == "Utopia")
-        ]
-        if not row_2035.empty:
-            dem_2035 = float(row_2035["EE_TOTAL"].iloc[0])   # MWh
-    except Exception as e:
-        st.caption(f"⚠️ Projeção 2035 indisponível ({e}) — usando consumo 2025 como referência.")
+    CENARIOS = [
+        ("Referencia", "Referência",     ACCENT),
+        ("Alto",       "Alto (PIB +3%)", "#22c55e"),
+        ("Baixo",      "Baixo (PIB -3%)", "#f59e0b"),
+    ]
+    CSV_PROJ = str(ROOT / "projecoes_demanda.csv")
 
-    if dem_2035 is None:
-        dem_2035 = socio["ee"]   # fallback
+    # ── Lê os 3 valores de EE_TOTAL 2035 do CSV ───────────────────
+    def _dem2035(cenario_key):
+        try:
+            df_proj = pd.read_csv(CSV_PROJ)
+            df_proj["Ano"] = df_proj["Ano"].astype(int)
+            row = df_proj[
+                (df_proj["Ano"] == 2035) &
+                (df_proj["Cenario"] == cenario_key) &
+                (df_proj["Local"] == "Utopia")
+            ]
+            if not row.empty:
+                return float(row["EE_TOTAL"].iloc[0])
+        except Exception:
+            pass
+        return socio["ee"]   # fallback
 
-    # ── Cálculos base ─────────────────────────────────────────────
-    hidro_2025   = HIDRO_2025_PCT * socio["ee"]   # MWh
-    hidro_2035   = HIDRO_2035_PCT * dem_2035       # MWh — 44% da projeção conservadora
-    margem       = hidro_2035 - hidro_2025
-    margem_pct   = (margem / hidro_2025 * 100) if hidro_2025 else 0
-    cob_2025     = hidro_2025 / (socio["ee"] or 1) * 100
-    cob_2035     = hidro_2035 / (dem_2035 or 1)   * 100
-
-    # ── Row 1: KPIs principais ────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Participação 2025",   "40 %",
-                         "do BEN 2025", HYD), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Geração hidro 2025",  f"{_fmt(hidro_2025/1e6,2)} TWh",
-                         f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Participação 2035",   "44 %",
-                         "teto fixo · cenário conservador", ACCENT_D), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Geração hidro 2035",  f"{_fmt(hidro_2035/1e6,2)} TWh",
-                         f"44% × demanda proj. conservadora", ACCENT_D), unsafe_allow_html=True)
-
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-    # ── Row 2: KPIs de expansão ───────────────────────────────────
-    k5, k6, k7, k8 = st.columns(4)
-    k5.markdown(kpi_card("Expansão necessária",  f"+{_fmt(margem/1e6,2)} TWh",
-                         "acréscimo 2025 → 2035", WIN if margem >= 0 else THR), unsafe_allow_html=True)
-    k6.markdown(kpi_card("Crescimento relativo", f"+{_fmt(margem_pct,1)} %",
-                         "vs. geração hidro 2025", WIN if margem >= 0 else THR), unsafe_allow_html=True)
-    k7.markdown(kpi_card("Demanda total 2035",   f"{_fmt(dem_2035/1e6,2)} TWh",
-                         "cenário conservador (Baixo)", TEXT_SEC), unsafe_allow_html=True)
-    k8.markdown(kpi_card("Fator de firmeza",     "Alto",
-                         "fonte despachável 24/7", HYD), unsafe_allow_html=True)
-
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-
-    # ── Gráficos — row 1 ─────────────────────────────────────────
-    g1, g2 = st.columns(2)
-
-    with g1:
-        # Barras: geração hidro 2025 vs 2035
-        fig = base_fig("Geração hidrelétrica: 2025 vs. 2035 (proj. conservadora)", height=300)
-        fig.add_trace(go.Bar(
-            x=["Hidro 2025", "Hidro 2035"],
-            y=[hidro_2025, hidro_2035],
-            marker_color=["#93c5fd", HYD],
-            text=[f"{hidro_2025/1e6:.2f} TWh", f"{hidro_2035/1e6:.2f} TWh"],
-            textposition="outside",
-            hovertemplate="%{x}: %{y:,.0f} MWh<extra></extra>",
-        ))
-        fig.update_layout(yaxis_title="MWh/ano", showlegend=False,
-                          yaxis=dict(range=[0, hidro_2035 * 1.18]))
-        st.plotly_chart(fig, use_container_width=True, key="h_bar")
-
-    with g2:
-        # Gauge participação 2035
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=HIDRO_2035_PCT * 100,
-            delta={"reference": HIDRO_2025_PCT * 100, "suffix": " pp",
-                   "increasing": {"color": WIN}},
-            number={"suffix": " %", "font": {"size": 40}},
-            title={"text": "Participação da hidro na matriz (2035)", "font": {"size": 13}},
-            gauge={
-                "axis": {"range": [0, 70], "tickwidth": 1},
-                "bar":  {"color": HYD},
-                "steps": [
-                    {"range": [0,  40], "color": "#e0f2fe"},
-                    {"range": [40, 44], "color": "#bae6fd"},
-                    {"range": [44, 70], "color": "#f1f5f9"},
-                ],
-                "threshold": {"line": {"color": THR, "width": 3}, "value": 44},
-            },
-        ))
-        fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=10),
-                          paper_bgcolor=BG_CHART, font=dict(color=TEXT_PRI))
-        st.plotly_chart(fig, use_container_width=True, key="h_gauge")
-
-    # ── Gráficos — row 2 ─────────────────────────────────────────
+    # ── Título dos 3 cenários em colunas ──────────────────────────
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-    g3, g4 = st.columns(2)
+    col_ref, col_alt, col_bai = st.columns(3, gap="large")
 
-    with g3:
-        # Decomposição da matriz 2025 vs 2035 (hidro vs resto)
-        fig = base_fig("Composição da matriz: hidro × outras fontes", height=300)
-        resto_2025 = socio["ee"] - hidro_2025
-        resto_2035 = dem_2035    - hidro_2035
-        fig.add_trace(go.Bar(
-            name="Hidro",
-            x=["2025", "2035"],
-            y=[hidro_2025, hidro_2035],
-            marker_color=HYD,
-            text=[f"{HIDRO_2025_PCT*100:.0f}%", f"{HIDRO_2035_PCT*100:.0f}%"],
-            textposition="inside", textfont=dict(color="white", size=12),
-        ))
-        fig.add_trace(go.Bar(
-            name="Outras fontes",
-            x=["2025", "2035"],
-            y=[resto_2025, resto_2035],
-            marker_color="#cbd5e1",
-            text=[f"{(1-HIDRO_2025_PCT)*100:.0f}%", f"{(1-HIDRO_2035_PCT)*100:.0f}%"],
-            textposition="inside", textfont=dict(color="#475569", size=12),
-        ))
-        fig.update_layout(barmode="stack", yaxis_title="MWh/ano",
-                          legend=dict(orientation="h", y=1.08))
-        st.plotly_chart(fig, use_container_width=True, key="h_comp")
+    for col, (cen_key, cen_lbl, cen_cor) in zip(
+        [col_ref, col_alt, col_bai], CENARIOS
+    ):
+        dem_2035   = _dem2035(cen_key)
+        hidro_2025 = HIDRO_2025_PCT * socio["ee"]
+        hidro_2035 = HIDRO_2035_PCT * dem_2035
+        margem     = hidro_2035 - hidro_2025
+        margem_pct = (margem / hidro_2025 * 100) if hidro_2025 else 0
+        pp_exp     = HIDRO_2035_PCT * 100 - HIDRO_2025_PCT * 100
 
-    with g4:
-        # Linha: evolução da geração hidro 2025→2035 (interpolação linear)
-        anos  = list(range(2025, 2036))
-        # interpolação linear simples entre hidro_2025 e hidro_2035
-        vals  = [hidro_2025 + (hidro_2035 - hidro_2025) * (a - 2025) / 10 for a in anos]
-        fig = base_fig("Trajetória de crescimento hidro 2025–2035", height=300)
-        fig.add_trace(go.Scatter(
-            x=anos, y=[v/1e6 for v in vals],
-            mode="lines+markers",
-            line=dict(color=HYD, width=2.5),
-            marker=dict(size=6, color=HYD),
-            fill="tozeroy", fillcolor="rgba(14,165,233,0.08)",
-            hovertemplate="Ano %{x}: %{y:.2f} TWh<extra></extra>",
-            name="Hidro"
-        ))
-        fig.add_hline(y=hidro_2025/1e6, line_dash="dot", line_color="#94a3b8",
-                      annotation_text="Base 2025", annotation_position="bottom right")
-        fig.update_layout(yaxis_title="TWh/ano", showlegend=False,
-                          xaxis=dict(tickvals=anos, tickangle=-45))
-        st.plotly_chart(fig, use_container_width=True, key="h_traj")
+        with col:
+            # ── Cabeçalho do cenário ───────────────────────────────
+            st.markdown(
+                f'<div style="background:{cen_cor}18;border:1.5px solid {cen_cor}55;'                f'border-radius:12px;padding:8px 14px;margin-bottom:12px;text-align:center;">'                f'<div style="font-size:13px;font-weight:800;color:{cen_cor};">{cen_lbl}</div>'                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # ── KPIs ───────────────────────────────────────────────
+            st.markdown(kpi_card("Participação 2025", "40 %", "do BEN 2025", HYD),
+                        unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Geração hidro 2025", f"{_fmt(hidro_2025/1e6,2)} TWh",
+                                 f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Demanda total 2035", f"{_fmt(dem_2035/1e6,2)} TWh",
+                                 "projeção EE total", cen_cor), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Participação 2035", "44 %", "teto fixo", ACCENT_D),
+                        unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Geração hidro 2035", f"{_fmt(hidro_2035/1e6,2)} TWh",
+                                 "44% × demanda 2035", ACCENT_D), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Expansão necessária", f"+{_fmt(margem/1e6,2)} TWh",
+                                 f"+{_fmt(margem_pct,1)}% vs. 2025",
+                                 WIN if margem >= 0 else THR), unsafe_allow_html=True)
+
+            # ── Gráfico barras ─────────────────────────────────────
+            fig = go.Figure(go.Bar(
+                x=["Hidro 2025", "Hidro 2035"],
+                y=[hidro_2025, hidro_2035],
+                marker_color=["#93c5fd", HYD],
+                text=[f"{hidro_2025/1e6:.2f} TWh", f"{hidro_2035/1e6:.2f} TWh"],
+                textposition="outside",
+                hovertemplate="%{x}: %{y:,.0f} MWh<extra></extra>",
+            ))
+            fig.update_layout(
+                height=240, showlegend=False,
+                yaxis=dict(range=[0, hidro_2035 * 1.22], title="MWh/ano",
+                           showgrid=True, gridcolor="rgba(226,232,240,0.6)"),
+                xaxis=dict(showgrid=False),
+                margin=dict(l=8, r=8, t=28, b=8),
+                paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                title=dict(text="2025 vs 2035", font=dict(size=11, color=TEXT_PRI), x=0),
+            )
+            st.plotly_chart(fig, use_container_width=True,
+                            key=f"h_bar_{cen_key}")
+
+            # ── Composição empilhada ───────────────────────────────
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(name="Hidro",
+                x=["2025","2035"], y=[hidro_2025, hidro_2035],
+                marker_color=HYD,
+                text=[f"{HIDRO_2025_PCT*100:.0f}%", f"{HIDRO_2035_PCT*100:.0f}%"],
+                textposition="inside", textfont=dict(color="white", size=11),
+            ))
+            fig2.add_trace(go.Bar(name="Outras",
+                x=["2025","2035"],
+                y=[socio["ee"]-hidro_2025, dem_2035-hidro_2035],
+                marker_color="#cbd5e1",
+                text=[f"{(1-HIDRO_2025_PCT)*100:.0f}%", f"{(1-HIDRO_2035_PCT)*100:.0f}%"],
+                textposition="inside", textfont=dict(color="#475569", size=11),
+            ))
+            fig2.update_layout(
+                barmode="stack", height=220, showlegend=False,
+                margin=dict(l=8, r=8, t=28, b=8),
+                paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                yaxis=dict(showgrid=True, gridcolor="rgba(226,232,240,0.6)", title="MWh/ano"),
+                title=dict(text="Composição da matriz", font=dict(size=11, color=TEXT_PRI), x=0),
+            )
+            st.plotly_chart(fig2, use_container_width=True,
+                            key=f"h_comp_{cen_key}")
 
     st.caption(
-        f"Participação base: 40% (BEN 2025). Teto 2035: 44% da demanda projetada cenário conservador "
-        f"({_fmt(dem_2035/1e6,2)} TWh). Expansão necessária: +{_fmt(margem/1e6,2)} TWh "
-        f"(+{_fmt(margem_pct,1)}%). A hidro é a única renovável firmemente despachável do país."
+        "Participação base: 40% (BEN 2025). Teto 2035: 44% fixo aplicado sobre cada cenário de demanda. "
+        "A hidro é a única renovável firmemente despachável do país."
     )
 
 # =======================================================================
@@ -824,140 +787,129 @@ def tab_hidro(socio: dict):
 # =======================================================================
 def tab_termo(socio: dict):
     section_title("Potencial Termelétrico",
-                  "Participação atual e projeção da geração termelétrica até 2035")
+                  "Participação atual e projeção da geração termelétrica até 2035 — 3 cenários")
 
-    # ── Constantes fixas ──────────────────────────────────────────
-    TERMO_2026_PCT  = 0.55   # participação BEN 2026
-    TERMO_2035_PCT  = 0.40   # alvo de participação 2035 (redução com entrada de renováveis)
-    CSV_PROJ        = str(ROOT / "projecoes_demanda.csv")
+    TERMO_2026_PCT = 0.55
+    TERMO_2035_PCT = 0.40
 
-    # ── Demanda 2035 cenário Baixo — lida do CSV ──────────────────
-    dem_2035 = None
-    try:
-        df_proj = pd.read_csv(CSV_PROJ)
-        df_proj["Ano"] = df_proj["Ano"].astype(int)
-        row_2035 = df_proj[
-            (df_proj["Ano"] == 2035) &
-            (df_proj["Cenario"] == "Baixo") &
-            (df_proj["Local"] == "Utopia")
-        ]
-        if not row_2035.empty:
-            dem_2035 = float(row_2035["EE_TOTAL"].iloc[0])
-    except Exception as e:
-        st.caption(f"⚠️ Projeção 2035 indisponível ({e}) — usando consumo 2025 como referência.")
+    CENARIOS = [
+        ("Referencia", "Referência",     ACCENT),
+        ("Alto",       "Alto (PIB +3%)", "#22c55e"),
+        ("Baixo",      "Baixo (PIB -3%)", "#f59e0b"),
+    ]
+    CSV_PROJ = str(ROOT / "projecoes_demanda.csv")
 
-    if dem_2035 is None:
-        dem_2035 = socio["ee"]
+    # ── Lê os 3 valores de EE_TOTAL 2035 do CSV ───────────────────
+    def _dem2035(cenario_key):
+        try:
+            df_proj = pd.read_csv(CSV_PROJ)
+            df_proj["Ano"] = df_proj["Ano"].astype(int)
+            row = df_proj[
+                (df_proj["Ano"] == 2035) &
+                (df_proj["Cenario"] == cenario_key) &
+                (df_proj["Local"] == "Utopia")
+            ]
+            if not row.empty:
+                return float(row["EE_TOTAL"].iloc[0])
+        except Exception:
+            pass
+        return socio["ee"]   # fallback
 
-    # ── Cálculos ──────────────────────────────────────────────────
-    termo_2026  = TERMO_2026_PCT * socio["ee"]
-    termo_2035  = TERMO_2035_PCT * dem_2035
-    var         = termo_2035 - termo_2026
-    var_pct     = (var / termo_2026 * 100) if termo_2026 else 0
-    pp_variacao = TERMO_2035_PCT * 100 - TERMO_2026_PCT * 100   # -15 pp
+    col_ref, col_alt, col_bai = st.columns(3, gap="large")
 
-    # ── Row 1: KPIs principais ────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Participação 2026",    "55 %",
-                         "do BEN 2026", THR), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Geração térmica 2026", f"{_fmt(termo_2026/1e6,2)} TWh",
-                         f"{_fmt(termo_2026)} MWh", THR), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Participação 2035",    f"{TERMO_2035_PCT*100:.0f} %",
-                         "alvo · entrada de renováveis", ACCENT_D), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Geração térmica 2035", f"{_fmt(termo_2035/1e6,2)} TWh",
-                         f"40% × demanda proj. conservadora", ACCENT_D), unsafe_allow_html=True)
+    for col, (cen_key, cen_lbl, cen_cor) in zip(
+        [col_ref, col_alt, col_bai], CENARIOS
+    ):
+        dem_2035   = _dem2035(cen_key)
+        termo_2026 = TERMO_2026_PCT * socio["ee"]
+        termo_2035 = TERMO_2035_PCT * dem_2035
+        var        = termo_2035 - termo_2026
+        var_pct    = (var / termo_2026 * 100) if termo_2026 else 0
 
-    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        with col:
+            # ── Cabeçalho do cenário ───────────────────────────────
+            st.markdown(
+                f'<div style="background:{cen_cor}18;border:1.5px solid {cen_cor}55;'                f'border-radius:12px;padding:8px 14px;margin-bottom:12px;text-align:center;">'                f'<div style="font-size:13px;font-weight:800;color:{cen_cor};">{cen_lbl}</div>'                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-    # ── Row 2: KPIs de variação ───────────────────────────────────
-    k5, k6, k7, k8 = st.columns(4)
-    k5.markdown(kpi_card("Variação absoluta",    f"{_fmt(var/1e6,2)} TWh",
-                         "2026 → 2035", WIN if var < 0 else THR), unsafe_allow_html=True)
-    k6.markdown(kpi_card("Variação relativa",    f"{_fmt(var_pct,1)} %",
-                         "vs. geração térmica 2026", WIN if var < 0 else THR), unsafe_allow_html=True)
-    k7.markdown(kpi_card("Demanda total 2035",   f"{_fmt(dem_2035/1e6,2)} TWh",
-                         "cenário conservador (Baixo)", TEXT_SEC), unsafe_allow_html=True)
-    k8.markdown(kpi_card("Redução percentual",   f"{pp_variacao:+.0f} pp",
-                         "pontos percentuais na participação", WIN), unsafe_allow_html=True)
+            # ── KPIs ───────────────────────────────────────────────
+            st.markdown(kpi_card("Participação 2026", "55 %", "do BEN 2026", THR),
+                        unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Geração térmica 2026", f"{_fmt(termo_2026/1e6,2)} TWh",
+                                 f"{_fmt(termo_2026)} MWh", THR), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Demanda total 2035", f"{_fmt(dem_2035/1e6,2)} TWh",
+                                 "projeção EE total", cen_cor), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Participação 2035", "40 %", "alvo · entrada de renováveis",
+                                 ACCENT_D), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Geração térmica 2035", f"{_fmt(termo_2035/1e6,2)} TWh",
+                                 "40% × demanda 2035", ACCENT_D), unsafe_allow_html=True)
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(kpi_card("Variação absoluta", f"{_fmt(var/1e6,2)} TWh",
+                                 f"{_fmt(var_pct,1)}% vs. 2026",
+                                 WIN if var < 0 else THR), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            # ── Gráfico barras ─────────────────────────────────────
+            fig = go.Figure(go.Bar(
+                x=["Térmica 2026", "Térmica 2035"],
+                y=[termo_2026, termo_2035],
+                marker_color=["#fca5a5", THR],
+                text=[f"{termo_2026/1e6:.2f} TWh", f"{termo_2035/1e6:.2f} TWh"],
+                textposition="outside",
+                hovertemplate="%{x}: %{y:,.0f} MWh<extra></extra>",
+            ))
+            fig.update_layout(
+                height=240, showlegend=False,
+                yaxis=dict(range=[0, max(termo_2026, termo_2035) * 1.22], title="MWh/ano",
+                           showgrid=True, gridcolor="rgba(226,232,240,0.6)"),
+                xaxis=dict(showgrid=False),
+                margin=dict(l=8, r=8, t=28, b=8),
+                paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                title=dict(text="2026 vs 2035", font=dict(size=11, color=TEXT_PRI), x=0),
+            )
+            st.plotly_chart(fig, use_container_width=True,
+                            key=f"t_bar_{cen_key}")
 
-    # ── Gráficos row 1 ────────────────────────────────────────────
-    g1, g2 = st.columns([1, 1.1])
+            # ── Composição empilhada ───────────────────────────────
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(name="Térmica",
+                x=["2026","2035"], y=[termo_2026, termo_2035],
+                marker_color=THR,
+                text=[f"{TERMO_2026_PCT*100:.0f}%", f"{TERMO_2035_PCT*100:.0f}%"],
+                textposition="inside", textfont=dict(color="white", size=11),
+            ))
+            fig2.add_trace(go.Bar(name="Outras",
+                x=["2026","2035"],
+                y=[socio["ee"]-termo_2026, dem_2035-termo_2035],
+                marker_color="#cbd5e1",
+                text=[f"{(1-TERMO_2026_PCT)*100:.0f}%", f"{(1-TERMO_2035_PCT)*100:.0f}%"],
+                textposition="inside", textfont=dict(color="#475569", size=11),
+            ))
+            fig2.update_layout(
+                barmode="stack", height=220, showlegend=False,
+                margin=dict(l=8, r=8, t=28, b=8),
+                paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                yaxis=dict(showgrid=True, gridcolor="rgba(226,232,240,0.6)", title="MWh/ano"),
+                title=dict(text="Composição da matriz", font=dict(size=11, color=TEXT_PRI), x=0),
+            )
+            st.plotly_chart(fig2, use_container_width=True,
+                            key=f"t_comp_{cen_key}")
 
-    with g1:
-        fig = base_fig("Geração térmica: 2026 vs. 2035 (proj. conservadora)", height=300)
-        fig.add_trace(go.Bar(
-            x=["Térmica 2026", "Térmica 2035"],
-            y=[termo_2026, termo_2035],
-            marker_color=["#fca5a5", THR],
-            text=[f"{termo_2026/1e6:.2f} TWh", f"{termo_2035/1e6:.2f} TWh"],
-            textposition="outside",
-            hovertemplate="%{x}: %{y:,.0f} MWh<extra></extra>",
-        ))
-        fig.update_layout(yaxis_title="MWh/ano", showlegend=False,
-                          yaxis=dict(range=[0, max(termo_2026, termo_2035) * 1.18]))
-        st.plotly_chart(fig, use_container_width=True, key="t_bar")
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-    with g2:
-        st.markdown(
-            f'<div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;padding:18px 20px;">'            f'<div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px;">🔥 Natureza do Potencial Térmico</div>'            f'<div style="font-size:13px;color:{TEXT_SEC};line-height:1.7;">'            f'O potencial termelétrico depende da <strong style="color:{TEXT_PRI};">política energética</strong>.<br/>'            f'O interesse em <em>reduzir, pressionar, abandonar, aumentar</em> são <strong style="color:{TEXT_PRI};">decisões estratégicas</strong> — '            f'uma vez que consideramos a entrada de combustível como estável, a térmica é definida por escolha, não por recurso geográfico.'            f'<br/><br/>Ela ocupa o papel de <strong style="color:{TEXT_PRI};">firmeza e segurança</strong> do sistema: '            f'entra quando sol, vento e hidro não são suficientes. '            f'No planejamento decenal, a tendência é que a participação relativa <em>recue</em> com a expansão de renováveis, '            f'mesmo mantendo a capacidade instalada como reserva.'            f'</div></div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── Gráficos row 2 ────────────────────────────────────────────
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-    g3, g4 = st.columns(2)
-
-    with g3:
-        # Composição matriz 2026 vs 2035 — termo vs outras
-        resto_2026 = socio["ee"] - termo_2026
-        resto_2035 = dem_2035    - termo_2035
-        fig = base_fig("Composição da matriz: térmica × outras fontes", height=300)
-        fig.add_trace(go.Bar(
-            name="Térmica",
-            x=["2026", "2035"],
-            y=[termo_2026, termo_2035],
-            marker_color=THR,
-            text=[f"{TERMO_2026_PCT*100:.0f}%", f"{TERMO_2035_PCT*100:.0f}%"],
-            textposition="inside", textfont=dict(color="white", size=12),
-        ))
-        fig.add_trace(go.Bar(
-            name="Outras fontes",
-            x=["2026", "2035"],
-            y=[resto_2026, resto_2035],
-            marker_color="#cbd5e1",
-            text=[f"{(1-TERMO_2026_PCT)*100:.0f}%", f"{(1-TERMO_2035_PCT)*100:.0f}%"],
-            textposition="inside", textfont=dict(color="#475569", size=12),
-        ))
-        fig.update_layout(barmode="stack", yaxis_title="MWh/ano",
-                          legend=dict(orientation="h", y=1.08))
-        st.plotly_chart(fig, use_container_width=True, key="t_comp")
-
-    with g4:
-        # Trajetória interpolada 2026→2035
-        anos  = list(range(2026, 2036))
-        vals  = [termo_2026 + (termo_2035 - termo_2026) * (a - 2026) / 9 for a in anos]
-        fig = base_fig("Trajetória de transição térmica 2026–2035", height=300)
-        fig.add_trace(go.Scatter(
-            x=anos, y=[v/1e6 for v in vals],
-            mode="lines+markers",
-            line=dict(color=THR, width=2.5),
-            marker=dict(size=6, color=THR),
-            fill="tozeroy", fillcolor="rgba(239,68,68,0.08)",
-            hovertemplate="Ano %{x}: %{y:.2f} TWh<extra></extra>",
-            name="Térmica"
-        ))
-        fig.add_hline(y=termo_2026/1e6, line_dash="dot", line_color="#94a3b8",
-                      annotation_text="Base 2026", annotation_position="bottom right")
-        fig.update_layout(yaxis_title="TWh/ano", showlegend=False,
-                          xaxis=dict(tickvals=anos, tickangle=-45))
-        st.plotly_chart(fig, use_container_width=True, key="t_traj")
+    # ── Card estratégico ──────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:14px;padding:18px 20px;">'        f'<div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:10px;">🔥 Natureza do Potencial Térmico</div>'        f'<div style="font-size:13px;color:{TEXT_SEC};line-height:1.7;">'        f'O potencial termelétrico depende da <strong style="color:{TEXT_PRI};">política energética</strong>. '        f'O interesse em <em>reduzir, pressionar, abandonar, aumentar</em> são <strong style="color:{TEXT_PRI};">decisões estratégicas</strong> — '        f'uma vez que consideramos a entrada de combustível como estável, a térmica é definida por escolha, não por recurso geográfico. '        f'No planejamento decenal, a tendência é que a participação relativa <em>recue</em> com a expansão de renováveis, '        f'mesmo mantendo a capacidade instalada como reserva.'        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
     st.caption(
-        f"Participação base: 55% (BEN 2026). Alvo 2035: 40% da demanda projetada cenário conservador "
-        f"({_fmt(dem_2035/1e6,2)} TWh). Variação: {_fmt(var/1e6,2)} TWh ({_fmt(var_pct,1)}%). "
-        f"A térmica é recurso de política, não de geografia."
+        "Participação base: 55% (BEN 2026). Alvo 2035: 40% aplicado sobre cada cenário de demanda. "
+        "A térmica é recurso de política, não de geografia."
     )
 
 # =======================================================================
