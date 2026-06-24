@@ -662,81 +662,162 @@ def tab_solar(socio: dict, gsa: dict):
 # =======================================================================
 def tab_hidro(socio: dict):
     section_title("Potencial Hidrelétrico",
-                  "Participação atual na matriz e margem de expansão permitida para o PDE 2035")
+                  "Participação atual e projeção da geração hidrelétrica até 2035")
 
-    HIDRO_SHARE_REAL = 0.44   # participação real confirmada
+    # ── Constantes fixas ──────────────────────────────────────────
+    HIDRO_2025_PCT  = 0.40   # participação real BEN 2025
+    HIDRO_2035_PCT  = 0.44   # teto de participação 2035 (fixo)
+    CSV_PROJ        = str(ROOT / "projecoes_demanda.csv")
 
-    with st.expander("⚙️  Premissas do cenário", expanded=True):
-        c1, c2 = st.columns(2)
-        teto = c1.slider("Teto de participação da hidro em 2035 (%)", 44, 60, 54, key="h_teto") / 100
-        dem_2035 = c2.number_input(
-            "Demanda projetada para 2035 (MWh)",
-            min_value=float(socio["ee"]) * 0.5,
-            value=float(socio["ee"]),
-            step=float(socio["ee"]) * 0.01,
-            key="h_dem",
-            help="Por padrão usa o consumo de 2025. Substitua pela demanda projetada da seção Previsão Decenal.",
-        )
+    # ── Demanda 2035 cenário Baixo (conservador) — lida do CSV ────
+    dem_2035 = None
+    try:
+        df_proj = pd.read_csv(CSV_PROJ)
+        df_proj["Ano"] = df_proj["Ano"].astype(int)
+        row_2035 = df_proj[
+            (df_proj["Ano"] == 2035) &
+            (df_proj["Cenario"] == "Baixo") &
+            (df_proj["Local"] == "TOTAL — UTÓPIA")
+        ]
+        if not row_2035.empty:
+            dem_2035 = float(row_2035["EE_TOTAL"].iloc[0])   # MWh
+    except Exception as e:
+        st.caption(f"⚠️ Projeção 2035 indisponível ({e}) — usando consumo 2025 como referência.")
 
-    hidro_2025 = HIDRO_SHARE_REAL * socio["ee"]        # MWh hoje (44%)
-    hidro_2035 = teto * dem_2035                         # MWh teto
-    margem = hidro_2035 - hidro_2025
-    margem_pct = (margem / hidro_2025 * 100) if hidro_2025 else 0
-    fch = (hidro_2025 / (socio["ee"] or 1)) * 100       # fator de contribuição atual
-    pp_expansao = teto * 100 - HIDRO_SHARE_REAL * 100   # pontos percentuais de expansão
+    if dem_2035 is None:
+        dem_2035 = socio["ee"]   # fallback
 
+    # ── Cálculos base ─────────────────────────────────────────────
+    hidro_2025   = HIDRO_2025_PCT * socio["ee"]   # MWh
+    hidro_2035   = HIDRO_2035_PCT * dem_2035       # MWh — 44% da projeção conservadora
+    margem       = hidro_2035 - hidro_2025
+    margem_pct   = (margem / hidro_2025 * 100) if hidro_2025 else 0
+    cob_2025     = hidro_2025 / (socio["ee"] or 1) * 100
+    cob_2035     = hidro_2035 / (dem_2035 or 1)   * 100
+
+    # ── Row 1: KPIs principais ────────────────────────────────────
     k1, k2, k3, k4 = st.columns(4)
-    k1.markdown(kpi_card("Participação 2025", f"{HIDRO_SHARE_REAL*100:.0f} %", "do BEN 2025", HYD), unsafe_allow_html=True)
-    k2.markdown(kpi_card("Geração hidro 2025", f"{_fmt(hidro_2025/1e6,2)} TWh", f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Teto hidro 2035", f"{_fmt(hidro_2035/1e6,2)} TWh", f"a {teto*100:.0f}% da demanda", ACCENT_D), unsafe_allow_html=True)
-    k4.markdown(kpi_card("Margem de expansão", f"+{_fmt(margem/1e6,2)} TWh", f"+{_fmt(margem_pct,1)}% vs. 2025", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+    k1.markdown(kpi_card("Participação 2025",   "40 %",
+                         "do BEN 2025", HYD), unsafe_allow_html=True)
+    k2.markdown(kpi_card("Geração hidro 2025",  f"{_fmt(hidro_2025/1e6,2)} TWh",
+                         f"{_fmt(hidro_2025)} MWh", HYD), unsafe_allow_html=True)
+    k3.markdown(kpi_card("Participação 2035",   "44 %",
+                         "teto fixo · cenário conservador", ACCENT_D), unsafe_allow_html=True)
+    k4.markdown(kpi_card("Geração hidro 2035",  f"{_fmt(hidro_2035/1e6,2)} TWh",
+                         f"44% × demanda proj. conservadora", ACCENT_D), unsafe_allow_html=True)
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-    k5, k6, k7, k8 = st.columns(4)
-    k5.markdown(kpi_card("Expansão possível", f"+{_fmt(pp_expansao,1)} pp", "pontos percentuais até 2035", ACCENT), unsafe_allow_html=True)
-    k6.markdown(kpi_card("Contribuição atual", f"{_fmt(fch,1)} %", "da demanda total coberta", "#1d4ed8"), unsafe_allow_html=True)
-    k7.markdown(kpi_card("Energia add. possível", f"{_fmt(margem/1e3,0)} GWh", "acréscimo até o teto", WIN if margem >= 0 else THR), unsafe_allow_html=True)
-    k8.markdown(kpi_card("Fator de firmeza", "Alto", "fonte despachável 24/7", HYD), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    # ── Row 2: KPIs de expansão ───────────────────────────────────
+    k5, k6, k7, k8 = st.columns(4)
+    k5.markdown(kpi_card("Expansão necessária",  f"+{_fmt(margem/1e6,2)} TWh",
+                         "acréscimo 2025 → 2035", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+    k6.markdown(kpi_card("Crescimento relativo", f"+{_fmt(margem_pct,1)} %",
+                         "vs. geração hidro 2025", WIN if margem >= 0 else THR), unsafe_allow_html=True)
+    k7.markdown(kpi_card("Demanda total 2035",   f"{_fmt(dem_2035/1e6,2)} TWh",
+                         "cenário conservador (Baixo)", TEXT_SEC), unsafe_allow_html=True)
+    k8.markdown(kpi_card("Fator de firmeza",     "Alto",
+                         "fonte despachável 24/7", HYD), unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # ── Gráficos — row 1 ─────────────────────────────────────────
     g1, g2 = st.columns(2)
 
     with g1:
-        fig = base_fig("Geração hidrelétrica: hoje vs. teto 2035")
+        # Barras: geração hidro 2025 vs 2035
+        fig = base_fig("Geração hidrelétrica: 2025 vs. 2035 (proj. conservadora)", height=300)
         fig.add_trace(go.Bar(
-            x=["Hidro 2025", "Teto hidro 2035"], y=[hidro_2025, hidro_2035],
+            x=["Hidro 2025", "Hidro 2035"],
+            y=[hidro_2025, hidro_2035],
             marker_color=["#93c5fd", HYD],
             text=[f"{hidro_2025/1e6:.2f} TWh", f"{hidro_2035/1e6:.2f} TWh"],
-            textposition="outside", hovertemplate="%{y:,.0f} MWh<extra></extra>",
+            textposition="outside",
+            hovertemplate="%{x}: %{y:,.0f} MWh<extra></extra>",
         ))
-        fig.update_layout(yaxis_title="MWh/ano", showlegend=False)
+        fig.update_layout(yaxis_title="MWh/ano", showlegend=False,
+                          yaxis=dict(range=[0, hidro_2035 * 1.18]))
         st.plotly_chart(fig, use_container_width=True, key="h_bar")
 
     with g2:
+        # Gauge participação 2035
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
-            value=teto * 100,
-            delta={"reference": HIDRO_SHARE_REAL * 100, "suffix": " pp", "increasing": {"color": WIN}},
+            value=HIDRO_2035_PCT * 100,
+            delta={"reference": HIDRO_2025_PCT * 100, "suffix": " pp",
+                   "increasing": {"color": WIN}},
             number={"suffix": " %", "font": {"size": 40}},
-            title={"text": "Participação da hidro na matriz", "font": {"size": 13}},
+            title={"text": "Participação da hidro na matriz (2035)", "font": {"size": 13}},
             gauge={
-                "axis": {"range": [0, 100], "tickwidth": 1},
-                "bar": {"color": HYD},
+                "axis": {"range": [0, 70], "tickwidth": 1},
+                "bar":  {"color": HYD},
                 "steps": [
-                    {"range": [0, 44], "color": "#e0f2fe"},
-                    {"range": [44, 54], "color": "#bae6fd"},
-                    {"range": [54, 100], "color": "#f1f5f9"},
+                    {"range": [0,  40], "color": "#e0f2fe"},
+                    {"range": [40, 44], "color": "#bae6fd"},
+                    {"range": [44, 70], "color": "#f1f5f9"},
                 ],
-                "threshold": {"line": {"color": THR, "width": 3}, "value": 54},
+                "threshold": {"line": {"color": THR, "width": 3}, "value": 44},
             },
         ))
-        fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=10),
+        fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=10),
                           paper_bgcolor=BG_CHART, font=dict(color=TEXT_PRI))
         st.plotly_chart(fig, use_container_width=True, key="h_gauge")
 
-    st.caption("Participação base: 44% (BEN 2025). O teto de expansão é ajustável no slider acima. "
-               "A hidro é a única fonte renovável firmemente despachável do país — seu papel na segurança energética vai além da participação percentual.")
+    # ── Gráficos — row 2 ─────────────────────────────────────────
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+    g3, g4 = st.columns(2)
 
+    with g3:
+        # Decomposição da matriz 2025 vs 2035 (hidro vs resto)
+        fig = base_fig("Composição da matriz: hidro × outras fontes", height=300)
+        resto_2025 = socio["ee"] - hidro_2025
+        resto_2035 = dem_2035    - hidro_2035
+        fig.add_trace(go.Bar(
+            name="Hidro",
+            x=["2025", "2035"],
+            y=[hidro_2025, hidro_2035],
+            marker_color=HYD,
+            text=[f"{HIDRO_2025_PCT*100:.0f}%", f"{HIDRO_2035_PCT*100:.0f}%"],
+            textposition="inside", textfont=dict(color="white", size=12),
+        ))
+        fig.add_trace(go.Bar(
+            name="Outras fontes",
+            x=["2025", "2035"],
+            y=[resto_2025, resto_2035],
+            marker_color="#cbd5e1",
+            text=[f"{(1-HIDRO_2025_PCT)*100:.0f}%", f"{(1-HIDRO_2035_PCT)*100:.0f}%"],
+            textposition="inside", textfont=dict(color="#475569", size=12),
+        ))
+        fig.update_layout(barmode="stack", yaxis_title="MWh/ano",
+                          legend=dict(orientation="h", y=1.08))
+        st.plotly_chart(fig, use_container_width=True, key="h_comp")
+
+    with g4:
+        # Linha: evolução da geração hidro 2025→2035 (interpolação linear)
+        anos  = list(range(2025, 2036))
+        # interpolação linear simples entre hidro_2025 e hidro_2035
+        vals  = [hidro_2025 + (hidro_2035 - hidro_2025) * (a - 2025) / 10 for a in anos]
+        fig = base_fig("Trajetória de crescimento hidro 2025–2035", height=300)
+        fig.add_trace(go.Scatter(
+            x=anos, y=[v/1e6 for v in vals],
+            mode="lines+markers",
+            line=dict(color=HYD, width=2.5),
+            marker=dict(size=6, color=HYD),
+            fill="tozeroy", fillcolor="rgba(14,165,233,0.08)",
+            hovertemplate="Ano %{x}: %{y:.2f} TWh<extra></extra>",
+            name="Hidro"
+        ))
+        fig.add_hline(y=hidro_2025/1e6, line_dash="dot", line_color="#94a3b8",
+                      annotation_text="Base 2025", annotation_position="bottom right")
+        fig.update_layout(yaxis_title="TWh/ano", showlegend=False,
+                          xaxis=dict(tickvals=anos, tickangle=-45))
+        st.plotly_chart(fig, use_container_width=True, key="h_traj")
+
+    st.caption(
+        f"Participação base: 40% (BEN 2025). Teto 2035: 44% da demanda projetada cenário conservador "
+        f"({_fmt(dem_2035/1e6,2)} TWh). Expansão necessária: +{_fmt(margem/1e6,2)} TWh "
+        f"(+{_fmt(margem_pct,1)}%). A hidro é a única renovável firmemente despachável do país."
+    )
 
 # =======================================================================
 #  ABA 5 — TERMO
