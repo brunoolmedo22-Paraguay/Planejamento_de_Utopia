@@ -828,8 +828,6 @@ def tab_termo(socio: dict):
                   "Participação atual e projeção da geração termelétrica até 2035")
 
     TERMO_2026_PCT = 0.55
-    TERMO_2035_PCT = 0.40
-
     CSV_PROJ = str(ROOT / "projecoes_demanda.csv")
 
     def _dem2035(cenario_key):
@@ -848,9 +846,9 @@ def tab_termo(socio: dict):
         return socio["ee"]
 
     CEN_OPTS = {
-        "Referência":     "Referencia",
-        "Alto (PIB +3%)": "Alto",
-        "Baixo (PIB -3%)":"Baixo",
+        "Referência":      "Referencia",
+        "Alto (PIB +3%)":  "Alto",
+        "Baixo (PIB -3%)": "Baixo",
     }
     CEN_CORES = {
         "Referencia": ACCENT,
@@ -858,20 +856,36 @@ def tab_termo(socio: dict):
         "Baixo":      "#f59e0b",
     }
 
-    cen_lbl = st.radio(
-        "📊 Cenário de demanda 2035",
-        list(CEN_OPTS.keys()),
-        horizontal=True,
-        key="t_cen_sel",
-    )
+    # ── Controles ─────────────────────────────────────────────────
+    ctrl1, ctrl2 = st.columns([1.2, 1])
+    with ctrl1:
+        cen_lbl = st.radio(
+            "📊 Cenário de demanda 2035",
+            list(CEN_OPTS.keys()),
+            horizontal=True,
+            key="t_cen_sel",
+        )
     cen_key = CEN_OPTS[cen_lbl]
     cen_cor = CEN_CORES[cen_key]
 
-    dem_2035   = _dem2035(cen_key)
+    dem_2035 = _dem2035(cen_key)
+
+    with ctrl2:
+        termo_2035_pct = st.slider(
+            "🔥 Participação térmica em 2035 (%)",
+            min_value=10,
+            max_value=70,
+            value=40,
+            step=1,
+            key="t_pct_slider",
+        ) / 100
+
+    # ── Cálculos ──────────────────────────────────────────────────
     termo_2026 = TERMO_2026_PCT * socio["ee"]
-    termo_2035 = TERMO_2035_PCT * dem_2035
+    termo_2035 = termo_2035_pct * dem_2035
     var        = termo_2035 - termo_2026
     var_pct    = (var / termo_2026 * 100) if termo_2026 else 0
+    pp_var     = termo_2035_pct * 100 - TERMO_2026_PCT * 100
 
     # ── Row 1: KPIs ───────────────────────────────────────────────
     k1, k2, k3, k4 = st.columns(4)
@@ -879,23 +893,25 @@ def tab_termo(socio: dict):
                          "do BEN 2026", THR), unsafe_allow_html=True)
     k2.markdown(kpi_card("Geração térmica 2026", f"{_fmt(termo_2026/1e6,2)} TWh",
                          f"{_fmt(termo_2026)} MWh", THR), unsafe_allow_html=True)
-    k3.markdown(kpi_card("Participação 2035",    "40 %",
-                         "alvo · entrada de renováveis", ACCENT_D), unsafe_allow_html=True)
+    k3.markdown(kpi_card("Participação 2035",    f"{termo_2035_pct*100:.0f} %",
+                         f"{pp_var:+.0f} pp vs. 2026",
+                         WIN if pp_var < 0 else THR), unsafe_allow_html=True)
     k4.markdown(kpi_card("Geração térmica 2035", f"{_fmt(termo_2035/1e6,2)} TWh",
-                         "40% × demanda 2035", ACCENT_D), unsafe_allow_html=True)
+                         f"{termo_2035_pct*100:.0f}% × demanda 2035", ACCENT_D), unsafe_allow_html=True)
 
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     k5, k6, k7, k8 = st.columns(4)
-    k5.markdown(kpi_card("Variação absoluta",    f"{_fmt(var/1e6,2)} TWh",
+    k5.markdown(kpi_card("Variação absoluta",  f"{_fmt(var/1e6,2)} TWh",
                          "2026 → 2035",
                          WIN if var < 0 else THR), unsafe_allow_html=True)
-    k6.markdown(kpi_card("Variação relativa",    f"{_fmt(var_pct,1)} %",
+    k6.markdown(kpi_card("Variação relativa",  f"{_fmt(var_pct,1)} %",
                          "vs. geração térmica 2026",
                          WIN if var < 0 else THR), unsafe_allow_html=True)
-    k7.markdown(kpi_card("Demanda total 2035",   f"{_fmt(dem_2035/1e6,2)} TWh",
+    k7.markdown(kpi_card("Demanda total 2035", f"{_fmt(dem_2035/1e6,2)} TWh",
                          f"cenário {cen_lbl}", cen_cor), unsafe_allow_html=True)
-    k8.markdown(kpi_card("Redução percentual",   "-15 pp",
-                         "pontos percentuais na participação", WIN), unsafe_allow_html=True)
+    k8.markdown(kpi_card("Variação pp",        f"{pp_var:+.0f} pp",
+                         "pontos percentuais na participação",
+                         WIN if pp_var < 0 else THR), unsafe_allow_html=True)
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
@@ -917,9 +933,9 @@ def tab_termo(socio: dict):
     with g2:
         fig = go.Figure(go.Indicator(
             mode="gauge+number+delta",
-            value=TERMO_2035_PCT * 100,
+            value=termo_2035_pct * 100,
             delta={"reference": TERMO_2026_PCT * 100, "suffix": " pp",
-                   "decreasing": {"color": WIN}},
+                   "decreasing": {"color": WIN}, "increasing": {"color": THR}},
             number={"suffix": " %", "font": {"size": 40}},
             title={"text": "Participação da térmica na matriz (2035)", "font": {"size": 13}},
             gauge={
@@ -930,7 +946,8 @@ def tab_termo(socio: dict):
                     {"range": [40, 55], "color": "#fecdd3"},
                     {"range": [55, 80], "color": "#f1f5f9"},
                 ],
-                "threshold": {"line": {"color": ACCENT, "width": 3}, "value": 40},
+                "threshold": {"line": {"color": ACCENT, "width": 3},
+                              "value": termo_2035_pct * 100},
             },
         ))
         fig.update_layout(height=300, margin=dict(l=20, r=20, t=50, b=10),
@@ -945,13 +962,13 @@ def tab_termo(socio: dict):
         fig.add_trace(go.Bar(name="Térmica",
             x=["2026", "2035"], y=[termo_2026, termo_2035],
             marker_color=THR,
-            text=[f"{TERMO_2026_PCT*100:.0f}%", f"{TERMO_2035_PCT*100:.0f}%"],
+            text=[f"{TERMO_2026_PCT*100:.0f}%", f"{termo_2035_pct*100:.0f}%"],
             textposition="inside", textfont=dict(color="white", size=12),
         ))
         fig.add_trace(go.Bar(name="Outras fontes",
             x=["2026", "2035"], y=[resto_2026, resto_2035],
             marker_color="#cbd5e1",
-            text=[f"{(1-TERMO_2026_PCT)*100:.0f}%", f"{(1-TERMO_2035_PCT)*100:.0f}%"],
+            text=[f"{(1-TERMO_2026_PCT)*100:.0f}%", f"{(1-termo_2035_pct)*100:.0f}%"],
             textposition="inside", textfont=dict(color="#475569", size=12),
         ))
         fig.update_layout(barmode="stack", yaxis_title="MWh/ano",
@@ -959,8 +976,8 @@ def tab_termo(socio: dict):
         st.plotly_chart(fig, use_container_width=True, key="t_comp")
 
     with g4:
-        anos  = list(range(2026, 2036))
-        vals  = [termo_2026 + (termo_2035 - termo_2026) * (a - 2026) / 9 for a in anos]
+        anos = list(range(2026, 2036))
+        vals = [termo_2026 + (termo_2035 - termo_2026) * (a - 2026) / 9 for a in anos]
         fig = base_fig("Trajetória de transição térmica 2026–2035", height=300)
         fig.add_trace(go.Scatter(
             x=anos, y=[v/1e6 for v in vals],
@@ -983,9 +1000,9 @@ def tab_termo(socio: dict):
         unsafe_allow_html=True,
     )
     st.caption(
-        f"Participação base: 55% (BEN 2026). Alvo 2035: 40% × demanda projetada {cen_lbl} "
-        f"({_fmt(dem_2035/1e6,2)} TWh). Variação: {_fmt(var/1e6,2)} TWh ({_fmt(var_pct,1)}%). "
-        f"A térmica é recurso de política, não de geografia."
+        f"Base: 55% (BEN 2026) = {_fmt(termo_2026/1e6,2)} TWh. "
+        f"Alvo 2035: {termo_2035_pct*100:.0f}% × {_fmt(dem_2035/1e6,2)} TWh ({cen_lbl}) "
+        f"= {_fmt(termo_2035/1e6,2)} TWh. Variação: {_fmt(var/1e6,2)} TWh ({_fmt(var_pct,1)}%)."
     )
 
 # =======================================================================
