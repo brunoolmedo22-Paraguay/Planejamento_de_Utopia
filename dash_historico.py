@@ -30,7 +30,7 @@ VARIABLE_DICTIONARY = {
     "PEA (Pop. Economicamente Ativa)": "PEA",
     "PIB Absoluto (Utd$)": "PIB",
     "PIB per Capita (Utd$)": "PIB PC",
-    "Consumo de Energia Elétrica Total (MWh)": "EE",
+    "Consumo de Energia Elétrica Total (kWh)": "EE",
     "Índice de Desenvolvimento Humano (IDH)": "IDH",
     "IDH — Renda": "IDH_R",
     "IDH — Educação": "IDH_E",
