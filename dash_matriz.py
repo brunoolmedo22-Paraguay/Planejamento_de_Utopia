@@ -165,6 +165,19 @@ def _gap(px=10):
     st.markdown(f"<div style='height:{px}px'></div>", unsafe_allow_html=True)
 
 
+def formula_box(titulo: str, corpo_html: str, cor: str = ACCENT):
+    """Caixa clara para explicar uma fórmula/conceito dentro do dash."""
+    st.markdown(
+        f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {cor};'
+        f'border-radius:10px;padding:12px 16px;margin:4px 0;">'
+        f'<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;'
+        f'color:{cor};margin-bottom:6px;">{titulo}</div>'
+        f'<div style="font-size:13px;color:{TEXT_PRI};line-height:1.65;">{corpo_html}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 # =======================================================================
 #  CARGA DE DADOS SOCIOECONÔMICOS (2025)
 # =======================================================================
@@ -222,6 +235,13 @@ def compute_economics(A, B, fc_pct, opex_fix_pct, opex_var,
     serie_opex_v  = [opex_v_anual * d for d in disc]
     serie_energia = [ee_anual     * d for d in disc]
 
+    # cronograma COMPLETO de amortização do CAPEX (toda a vida útil = LFSP anos).
+    # A parcela é a mesma todo ano; o plano só "conta" as que caem até 2035.
+    anos_full = list(range(0, int(lfsp)))
+    disc_full = [1.0 / (1 + w) ** t for t in anos_full]
+    serie_capex_nom_full  = [pmt_capex for _ in anos_full]                  # nominal (constante)
+    serie_capex_disc_full = [pmt_capex * d for d in disc_full]              # trazido ao presente
+
     npv_capex   = float(np.sum(serie_capex))
     npv_opex_f  = float(np.sum(serie_opex_f))
     npv_opex_v  = float(np.sum(serie_opex_v))
@@ -239,6 +259,11 @@ def compute_economics(A, B, fc_pct, opex_fix_pct, opex_var,
         npv_capex=npv_capex, npv_opex_f=npv_opex_f, npv_opex_v=npv_opex_v,
         npv_total=npv_total, npv_energia=npv_energia,
         lcoe=lcoe,
+        # meta + cronograma completo (vida útil = LFSP)
+        wacc_frac=w, lfsp=int(lfsp), delta_op=int(delta_op),
+        anos_full=anos_full, disc_full=disc_full,
+        serie_capex_nom_full=serie_capex_nom_full,
+        serie_capex_disc_full=serie_capex_disc_full,
         # decomposição da tarifa (US$/MWh)
         tar_capex=(npv_capex / npv_energia if npv_energia > 0 else float("nan")),
         tar_opex_f=(npv_opex_f / npv_energia if npv_energia > 0 else float("nan")),
@@ -348,6 +373,20 @@ def tab_atualidade():
         st.markdown("##### Estimativa de potência instalada")
         st.caption("Potência ≈ EE da fonte ÷ (8760 · FC). Selecione o fator de capacidade de referência "
                   "(da tabela econômica) para cada tecnologia.")
+
+        formula_box(
+            "Como a energia vira potência instalada",
+            f'A energia gerada por uma usina em um ano é '
+            f'<span style="font-family:monospace;color:{ACCENT_D};">EE = P &times; 8760 h &times; FC</span>. '
+            f'Como aqui conhecemos a energia de cada fonte (a fatia da matriz) e queremos a potência, '
+            f'invertemos a fórmula:<br>'
+            f'<span style="font-family:monospace;font-size:13.5px;color:{ACCENT_D};">'
+            f'P = EE<sub>fonte</sub> &divide; (8760 h &times; FC)</span>.<br>'
+            f'<span style="color:{TEXT_SEC};font-size:12px;">O FC (fator de capacidade) é a fração média do '
+            f'tempo em que a usina gera à potência plena — hídricas e térmicas têm FC alto; solar e eólica, '
+            f'mais baixo. Por isso, para a mesma energia, uma fonte de FC baixo precisa de mais potência instalada.</span>',
+            ACCENT,
+        )
 
         # seleção de FC por tecnologia
         fc_sel = {}
@@ -539,6 +578,21 @@ def tab_analise_economica():
 
     # ── Grandezas anuais ──────────────────────────────────────────────
     st.markdown("##### Grandezas anuais")
+
+    formula_box(
+        "Como se calcula a energia gerada",
+        f'A energia elétrica gerada por ano é a potência instalada multiplicada pelas horas do ano '
+        f'e pelo <b>fator de capacidade</b> (FC) — a fração do tempo que a usina gera na média:<br>'
+        f'<span style="font-family:monospace;font-size:13.5px;color:{ACCENT_D};">'
+        f'EE<sub>ano</sub> = P &times; 8760 h &times; FC</span> &nbsp;=&nbsp; '
+        f'<b>{_fmt(potencia,1)} MW</b> &times; 8760 h &times; <b>{_fmt(f["fc"],0)} %</b> '
+        f'= <b>{_fmt(R["ee_anual"],0)} MWh/ano</b>.<br>'
+        f'<span style="color:{TEXT_SEC};font-size:12px;">O FC é o da fonte selecionada (tabela da aba '
+        f'<i>Config Econômico</i>). Um FC de {_fmt(f["fc"],0)} % equivale a gerar à potência plena durante '
+        f'{_fmt(8760*f["fc"]/100,0)} h por ano.</span>',
+        ACCENT,
+    )
+
     a1, a2, a3, a4 = st.columns(4)
     a1.markdown(kpi_card("Energia anual", _fmt(R["ee_anual"], 0, " MWh"),
                         f"{_fmt(R['ee_anual']/1000, 3)} GWh/ano", ACCENT), unsafe_allow_html=True)
@@ -557,6 +611,22 @@ def tab_analise_economica():
                         "parcela CAPEX + OPEX (ano cheio)", TEXT_PRI), unsafe_allow_html=True)
     b3.markdown(kpi_card("Energia descontada (VPL)", _fmt(R["npv_energia"], 0, " MWh"),
                         f"anos 0…{delta_op} ao WACC", "#047857"), unsafe_allow_html=True)
+
+    _gap(8)
+    formula_box(
+        f"CAPEX: distribuído em {lfsp} anos, contado só até 2035",
+        f'O CAPEX total (<b>{_us(R["capex"])}</b>) <b>não</b> é pago à vista nem amortizado no prazo do plano. '
+        f'Ele é distribuído como uma anuidade ao longo de toda a vida útil — <b>{lfsp} anos</b> — gerando uma '
+        f'parcela constante de <b>{_us(R["pmt_capex"])}/ano</b>:<br>'
+        f'<span style="font-family:monospace;font-size:13.5px;color:{C_CAPEX};">'
+        f'parcela = CAPEX &divide; FA({lfsp}; {_fmt(wacc,1)} %)</span>, onde '
+        f'<span style="font-family:monospace;">FA(n;i) = [(1+i)<sup>n</sup>&minus;1] &divide; [i&middot;(1+i)<sup>n</sup>]</span>.<br>'
+        f'Entrar em <b>{ano_entrada}</b> não significa amortizar o CAPEX em {delta_op + 1} anos: significa que, '
+        f'das {lfsp} parcelas dessa amortização, <b>só as {delta_op + 1} que caem entre {ano_entrada} e 2035</b> '
+        f'entram neste plano (e no VPL). As demais parcelas seguem sendo pagas pela usina depois de 2035, '
+        f'fora do horizonte do plano. Veja isso nas figuras de fluxo de caixa abaixo. 👇',
+        C_CAPEX,
+    )
 
     st.markdown("---")
 
@@ -622,6 +692,111 @@ def tab_analise_economica():
         fig2.update_layout(showlegend=False, height=210, yaxis_title="US$/MWh",
                           margin=dict(l=10, r=10, t=20, b=10))
         st.plotly_chart(fig2, use_container_width=True, key="ae_tar_decomp")
+
+    st.markdown("---")
+
+    # ── Fluxo de caixa em figuras ─────────────────────────────────────
+    st.markdown("##### Fluxo de caixa")
+    st.caption("O desembolso ano a ano (CAPEX distribuído na vida útil + OPEX), os mesmos valores "
+               "trazidos ao presente e a formação acumulada do VPL.")
+
+    ano0      = int(ano_entrada)
+    anos_full = R["anos_full"]                       # 0 … LFSP-1
+    cal_full  = [ano0 + t for t in anos_full]
+    dop       = R["delta_op"]
+    pmt, opf, opv = R["pmt_capex"], R["opex_f_anual"], R["opex_v_anual"]
+    x_lim     = 2035.5                               # fronteira do horizonte do plano
+    GRIS      = "#cbd5e1"
+
+    # máscaras dentro / fora do horizonte (até 2035)
+    capex_in  = [pmt if t <= dop else 0 for t in anos_full]
+    capex_out = [pmt if t >  dop else 0 for t in anos_full]
+    opexf_in  = [opf if t <= dop else 0 for t in anos_full]
+    opexv_in  = [opv if t <= dop else 0 for t in anos_full]
+
+    # ---- Figura 1 · fluxo de caixa NOMINAL (vida útil inteira) -------------
+    st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
+                f'1 · Fluxo de caixa nominal — desembolso a cada ano</div>', unsafe_allow_html=True)
+    fig_nom = base_fig("", height=340)
+    fig_nom.add_trace(go.Bar(x=cal_full, y=capex_in, name="Parcela CAPEX (no plano)",
+                             marker_color=C_CAPEX,
+                             hovertemplate="%{x}<br>Parcela CAPEX: %{y:,.0f} US$<extra></extra>"))
+    fig_nom.add_trace(go.Bar(x=cal_full, y=opexf_in, name="OPEX fixo",
+                             marker_color=C_OPEXF,
+                             hovertemplate="%{x}<br>OPEX fixo: %{y:,.0f} US$<extra></extra>"))
+    fig_nom.add_trace(go.Bar(x=cal_full, y=opexv_in, name="OPEX variável",
+                             marker_color=C_OPEXV,
+                             hovertemplate="%{x}<br>OPEX var.: %{y:,.0f} US$<extra></extra>"))
+    fig_nom.add_trace(go.Bar(x=cal_full, y=capex_out, name="Parcela CAPEX (além de 2035)",
+                             marker_color=GRIS, marker_line_width=0,
+                             hovertemplate="%{x}<br>Parcela CAPEX (fora do plano): %{y:,.0f} US$<extra></extra>"))
+    fig_nom.update_layout(barmode="stack", height=340, yaxis_title="US$/ano",
+                          xaxis=dict(title="ano", dtick=1),
+                          legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                          margin=dict(l=10, r=10, t=10, b=30))
+    fig_nom.add_vline(x=x_lim, line_dash="dot", line_color=TEXT_SEC, line_width=1.5)
+    fig_nom.add_annotation(x=x_lim, y=1.0, yref="paper", text="fim do plano (2035)",
+                           showarrow=False, font=dict(size=10, color=TEXT_SEC),
+                           xanchor="left", xshift=4)
+    st.plotly_chart(fig_nom, use_container_width=True, key="ae_cf_nom")
+    st.caption(f"A parcela do CAPEX (**{_us(pmt)}/ano**) se repete por toda a vida útil de **{lfsp} anos**. "
+               f"As barras coloridas (até 2035) entram no plano e no VPL; as **cinzas** são parcelas que a "
+               f"usina segue pagando depois de 2035, fora do horizonte.")
+    _gap(6)
+
+    # ---- Figura 2 · valores TRAZIDOS AO PRESENTE -------------------------
+    st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
+                f'2 · Valores trazidos ao presente — fluxo descontado ao WACC</div>',
+                unsafe_allow_html=True)
+    cal_in = [ano0 + t for t in R["anos"]]
+    nom_tot = pmt + opf + opv
+    fig_pv = base_fig("", height=320)
+    fig_pv.add_trace(go.Bar(x=cal_in, y=R["serie_capex"], name="CAPEX (VP)", marker_color=C_CAPEX,
+                            hovertemplate="%{x}<br>CAPEX VP: %{y:,.0f} US$<extra></extra>"))
+    fig_pv.add_trace(go.Bar(x=cal_in, y=R["serie_opex_f"], name="OPEX fixo (VP)", marker_color=C_OPEXF,
+                            hovertemplate="%{x}<br>OPEX fixo VP: %{y:,.0f} US$<extra></extra>"))
+    fig_pv.add_trace(go.Bar(x=cal_in, y=R["serie_opex_v"], name="OPEX var. (VP)", marker_color=C_OPEXV,
+                            hovertemplate="%{x}<br>OPEX var. VP: %{y:,.0f} US$<extra></extra>"))
+    fig_pv.add_trace(go.Scatter(x=cal_in, y=[nom_tot] * len(cal_in), name="desembolso nominal",
+                                mode="lines", line=dict(color=TEXT_SEC, dash="dash", width=1.5),
+                                hovertemplate="%{x}<br>nominal: %{y:,.0f} US$<extra></extra>"))
+    fig_pv.update_layout(barmode="stack", height=320, yaxis_title="US$ (valor presente)",
+                         xaxis=dict(title="ano", dtick=1),
+                         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                         margin=dict(l=10, r=10, t=10, b=30))
+    st.plotly_chart(fig_pv, use_container_width=True, key="ae_cf_pv")
+    st.caption(f"Cada barra é o desembolso daquele ano dividido por (1+WACC)^t. A linha tracejada é o "
+               f"desembolso nominal constante (**{_us(nom_tot)}/ano**): quanto mais distante o ano, mais o "
+               f"desconto encolhe a barra. A soma de todas as barras é o **VPL do custo = {_us(R['npv_total'])}**.")
+    _gap(6)
+
+    # ---- Figura 3 · DISTRIBUIÇÃO acumulada do VPL ------------------------
+    st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
+                f'3 · Distribuição acumulada — como o VPL se forma ano a ano</div>',
+                unsafe_allow_html=True)
+    tot_pv_year = [c + ff + vv for c, ff, vv in
+                   zip(R["serie_capex"], R["serie_opex_f"], R["serie_opex_v"])]
+    acum = list(np.cumsum(tot_pv_year))
+    fig_cum = base_fig("", height=300)
+    fig_cum.add_trace(go.Bar(x=cal_in, y=tot_pv_year, name="custo do ano (VP)",
+                             marker_color="rgba(2,132,199,0.30)",
+                             hovertemplate="%{x}<br>custo VP do ano: %{y:,.0f} US$<extra></extra>"))
+    fig_cum.add_trace(go.Scatter(x=cal_in, y=acum, name="VPL acumulado", mode="lines+markers",
+                                 line=dict(color=ACCENT_D, width=2.5),
+                                 marker=dict(size=6, color=ACCENT_D),
+                                 fill="tozeroy", fillcolor="rgba(14,165,233,0.12)",
+                                 hovertemplate="%{x}<br>acumulado: %{y:,.0f} US$<extra></extra>"))
+    fig_cum.add_hline(y=R["npv_total"], line_dash="dot", line_color="#047857", line_width=1.5)
+    fig_cum.add_annotation(x=cal_in[0], y=R["npv_total"], text=f"VPL total = {_us(R['npv_total'])}",
+                           showarrow=False, font=dict(size=11, color="#047857"),
+                           xanchor="left", yanchor="bottom", yshift=2)
+    fig_cum.update_layout(height=300, yaxis_title="US$",
+                          xaxis=dict(title="ano", dtick=1),
+                          legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                          margin=dict(l=10, r=10, t=10, b=30))
+    st.plotly_chart(fig_cum, use_container_width=True, key="ae_cf_cum")
+    st.caption("A curva mostra o custo a valor presente se somando ano a ano até atingir o VPL total — "
+               "é a contribuição de cada ano para o custo do plano.")
 
     st.markdown("---")
 
