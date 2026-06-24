@@ -129,16 +129,19 @@ def _fmt(v, dec=0, suf=""):
 
 
 def kpi_card(label, value, sub="", color=TEXT_PRI):
+    # Wrapper height:100%+flex faz todos os cards da row terem mesma altura
     css = ("background:#ffffff; border:1px solid #e2e8f0; border-radius:14px;"
-           "padding:12px 14px; box-shadow:0 2px 10px rgba(14,165,233,0.05); height:100%;")
+           "padding:12px 14px; box-shadow:0 2px 10px rgba(14,165,233,0.05);"
+           "display:flex; flex-direction:column; justify-content:center; height:100%;")
     sub_html = (f'<div style="font-size:11px;color:{TEXT_SEC};margin-top:3px;font-weight:500;">{sub}</div>'
                 if sub else "")
     return (
+        f'<div style="height:100%;display:flex;flex-direction:column;">'
         f'<div style="{css}">'
         f'<div style="font-size:10px;color:{TEXT_SEC};font-weight:600;text-transform:uppercase;'
         f'letter-spacing:0.05em;margin-bottom:2px;">{label}</div>'
         f'<div style="font-size:18px;font-weight:700;color:{color};letter-spacing:-0.3px;">{value}</div>'
-        f'{sub_html}</div>'
+        f'{sub_html}</div></div>'
     )
 
 
@@ -460,9 +463,38 @@ def tab_eolica(socio: dict):
     section_title("Potencial Eólico",
                   "Recurso e produção por turbina · Global Wind Atlas (10% das áreas mais ventosas)")
 
-    # ── AEP médio das 4 turbinas (resultado principal) ────────────
+    # ── AEP médio das 4 turbinas — lido dos .tif (resultado principal) ──
+    _aep_vals = []
+    for _t in TURBINES:
+        _r = read_aep_tif(_t["tif"])
+        if "stats" in _r:
+            _v = _r["stats"]["mean"]
+            _cf_chk = _v * 1e6 / (_t["p_kw"] * 8760)
+            if _cf_chk > 0.75:
+                _v = _v / 1000
+            _aep_vals.append(_v)
+        else:
+            _aep_vals.append(None)
+
+    _cells = ""
+    for _t, _v in zip(TURBINES, _aep_vals):
+        _nome_curto = _t["nome"].replace("Generic ", "").replace(" · ", " ")
+        _val_str = f"{_fmt(_v, 1)}" if _v is not None else "—"
+        _cells += (
+            f'<div style="text-align:center;">'
+            f'<div style="font-size:11px;color:{TEXT_SEC};font-weight:600;margin-bottom:2px;">{_nome_curto}</div>'
+            f'<div style="font-size:22px;font-weight:800;color:#10b981;">{_val_str}</div>'
+            f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'
+        )
+
     st.markdown(
-        f'<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;'        f'border-radius:14px;padding:12px 18px;margin-bottom:14px;">'        f'<div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;'        f'letter-spacing:0.06em;margin-bottom:8px;">⚡ AEP Médio por Turbina — resultado principal</div>'        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,0 MW · Class 1</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,5 MW · Class 2</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">4,5 MW · Class 3</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'<div style="text-align:center;"><div style="font-size:11px;color:{TEXT_SEC};font-weight:600;">15,0 MW · Offshore</div>'        f'<div style="font-size:22px;font-weight:800;color:#10b981;">18,8</div>'        f'<div style="font-size:10px;color:{TEXT_SEC};">GWh/ano</div></div>'        f'</div></div>',
+        f'<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1px solid #bbf7d0;'
+        f'border-radius:14px;padding:12px 18px;margin-bottom:14px;">'
+        f'<div style="font-size:11px;font-weight:700;color:#047857;text-transform:uppercase;'
+        f'letter-spacing:0.06em;margin-bottom:8px;">⚡ AEP Médio por Turbina — resultado principal</div>'
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">'
+        f'{_cells}'
+        f'</div></div>',
         unsafe_allow_html=True,
     )
 
