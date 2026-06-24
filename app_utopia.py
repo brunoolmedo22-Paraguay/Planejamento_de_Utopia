@@ -384,7 +384,8 @@ elif secao == "potencial":
 elif secao == "matriz":
     s = SECOES["matriz"]
     st.markdown(f'<div class="secao-chip">{s["icon"]} {s["title"]}</div>', unsafe_allow_html=True)
-    render_em_breve(s["title"])
+    from dash_matriz import run_matriz
+    run_matriz()
 
 else:
     render_home()
