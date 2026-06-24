@@ -438,8 +438,7 @@ def _turbine_cell(t: dict, socio: dict):
     m1, m2, m3 = st.columns(3)
     m1.markdown(kpi_card("AEP médio/turbina", f"{_fmt(aep_med,1)}", "GWh/ano", WIN), unsafe_allow_html=True)
     m2.markdown(kpi_card("Fator de capacidade", f"{_fmt(cf*100,1)} %", "no recurso 10%", "#047857"), unsafe_allow_html=True)
-    m3.markdown(kpi_card("Potencial da área", f"{_fmt(total_gwh/1000,2)} TWh", f"≈ {_fmt(n_turb,0)} turbinas", ACCENT_D), unsafe_allow_html=True)
-
+   
     # Heatmap do raster
     heat = np.array(res["heat"], dtype="float64")
     fig = go.Figure(go.Heatmap(
