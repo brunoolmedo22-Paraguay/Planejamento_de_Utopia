@@ -133,7 +133,7 @@ def get_chart_builders(df: pd.DataFrame):
         ),
         "Consumo de Energia Elétrica Total Consolidado": lambda h=280: (
             line(base_fig("Consumo de Energia Elétrica Total Consolidado", h), df["ANO"], df["EE"], "EE Total Consolidada", "rgba(3, 105, 161, 1)", width=3, fill="tozeroy")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Crescimento de População e PEA": lambda h=280: (
             line(line(base_fig("Crescimento de População e PEA", h), df["ANO"], df["POPULAÇÃO"], "População", "rgba(14, 165, 233, 1)"),
@@ -162,7 +162,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE RES A"], "Consumo Classe Alta", "rgba(14, 165, 233, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE RES M"], "Consumo Classe Média", "rgba(56, 189, 248, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE RES B"], "Consumo Classe Baixa", "rgba(186, 230, 253, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Residencial por Categoria": lambda h=280: (
             line(line(line(base_fig("Área Residencial por Categoria (km²)", h), df["ANO"], df["AR RES A"], "Área Alta", "rgba(14, 165, 233, 1)"),
@@ -189,7 +189,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE IND G"], "Grande Porte", "rgba(3, 105, 161, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE IND M"], "Médio Porte", "rgba(14, 165, 233, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE IND P"], "Pequeno Porte", "rgba(125, 211, 252, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Ocupada Industrial": lambda h=280: (
             line(base_fig("Área Ocupada Industrial", h), df["ANO"], df["AR IND"], "AR IND Total", "rgba(124, 58, 237, 1)", fill="tozeroy")
@@ -210,7 +210,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE SER G"], "Grande Porte", "rgba(6, 95, 70, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE SER M"], "Médio Porte", "rgba(16, 185, 129, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE SER P"], "Pequeno Porte", "rgba(167, 243, 208, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Ocupada Serviços": lambda h=280: (
             line(base_fig("Área Ocupada Serviços", h), df["ANO"], df["AR SER"], "AR SER Total", "rgba(16, 185, 129, 1)", fill="tozeroy")
@@ -231,7 +231,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE MIN G"], "Grande Porte", "rgba(180, 83, 9, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE MIN M"], "Médio Porte", "rgba(245, 158, 11, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE MIN P"], "Pequeno Porte", "rgba(253, 230, 138, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Mineral": lambda h=280: (
             line(base_fig("Área Mineral", h), df["ANO"], df["AR MIN"], "AR MIN Total", "rgba(245, 158, 11, 1)", fill="tozeroy")
@@ -252,7 +252,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE AGR G"], "Grande Porte", "rgba(21, 128, 61, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE AGR M"], "Médio Porte", "rgba(34, 197, 95, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE AGR P"], "Pequeno Porte", "rgba(187, 247, 208, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Agropecuária": lambda h=280: (
             line(base_fig("Área Agropecuária", h), df["ANO"], df["AR AGR"], "AR AGR Total", "rgba(34, 197, 95, 1)", fill="tozeroy")
@@ -263,7 +263,7 @@ def get_chart_builders(df: pd.DataFrame):
                            df["ANO"], df["EE UTIL G"], "Grande Porte", "rgba(109, 40, 217, 1)", width=1.5, dash="dot"),
                       df["ANO"], df["EE UTIL M"], "Médio Porte", "rgba(139, 92, 246, 1)", width=1.5, dash="dot"),
                  df["ANO"], df["EE UTIL P"], "Pequeno Porte", "rgba(196, 181, 253, 1)", width=1.5, dash="dot")
-            .update_layout(yaxis_title="MWh")
+            .update_layout(yaxis_title="kWh")
         ),
         "Área Utilidades": lambda h=280: (
             line(base_fig("Área Utilidades", h), df["ANO"], df["AR UTIL"], "AR UTIL Total", "rgba(139, 92, 246, 1)", fill="tozeroy")
@@ -295,7 +295,7 @@ def render_kpis(df: pd.DataFrame, cidade: str):
         ("💰 PIB Absoluto", f"Utd$ {last['PIB']:,.0f}",        delta_pct(last["PIB"], first["PIB"])),
         ("📊 PIB PC",      f"Utd$ {last['PIB PC']:,.2f}",     delta_pct(last["PIB PC"], first["PIB PC"])),
         ("🌟 IDH",         f"{last['IDH']:.4f}",              delta_pct(last["IDH"], first["IDH"])),
-        ("⚡ EE Total",    f"{last['EE']:,.0f} MWh",          delta_pct(last["EE"], first["EE"])),
+        ("⚡ EE Total",    f"{last['EE']:,.0f} kWh",          delta_pct(last["EE"], first["EE"])),
         ("🗺️ Área Total",  f"{last['AR TOTAL']:,.2f} km²",   delta_pct(last["AR TOTAL"], first["AR TOTAL"])),
     ]
 
