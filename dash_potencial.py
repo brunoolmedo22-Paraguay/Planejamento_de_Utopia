@@ -165,7 +165,7 @@ def base_fig(title, height=320):
 # =======================================================================
 #  CARGA DE DADOS
 # =======================================================================
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_socio_2025(excel_path: str) -> dict:
     """Lê população, PIB e consumo EE de 2025 da aba RESUMO UTÓPIA."""
     df = pd.read_excel(excel_path, sheet_name="RESUMO UTÓPIA", header=0)
@@ -181,7 +181,7 @@ def load_socio_2025(excel_path: str) -> dict:
     }
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_gsa_stats(excel_path: str) -> dict:
     """Lê as estatísticas (médias e percentis) do relatório Global Solar Atlas."""
     out = {}
@@ -201,7 +201,7 @@ def load_gsa_stats(excel_path: str) -> dict:
     return out
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_gsa_dist(excel_path: str, key: str) -> pd.DataFrame:
     """Lê a distribuição (histograma) de uma variável do GSA."""
     raw = pd.read_excel(excel_path, sheet_name=f"{key}_dist", header=None)
@@ -219,7 +219,7 @@ def load_gsa_dist(excel_path: str, key: str) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["de", "ate", "pct"])
 
 
-@st.cache_data
+@st.cache_data(ttl=300)
 def read_aep_tif(tif_name: str) -> dict:
     """
     Lê um raster .tif de Annual Energy Production (GWh/ano por turbina) do GWA.
