@@ -327,9 +327,9 @@ def tab_atualidade():
                f'Equivalências da energia total de 2025</div>', unsafe_allow_html=True)
     e1, e2, e3, e4 = st.columns(4)
     e1.markdown(kpi_card("Em TWh", _fmt(ee_total / 1e6, 4), "terawatt-hora"), unsafe_allow_html=True)
-    e2.markdown(kpi_card("Em GWh", _fmt(ee_total / 1e3, 0), "gigawatt-hora"), unsafe_allow_html=True)
-    e3.markdown(kpi_card("Em MWh", _fmt(ee_total, 0), "megawatt-hora"), unsafe_allow_html=True)
-    e4.markdown(kpi_card("Em kWh", _fmt(ee_total * 1e3, 0), "quilowatt-hora", ACCENT_D),
+    e2.markdown(kpi_card("Em GWh", _fmt(ee_total / 1e3, 1), "gigawatt-hora"), unsafe_allow_html=True)
+    e3.markdown(kpi_card("Em MWh", _fmt(ee_total, 1), "megawatt-hora"), unsafe_allow_html=True)
+    e4.markdown(kpi_card("Em kWh", _fmt(ee_total * 1e3, 1), "quilowatt-hora", ACCENT_D),
                 unsafe_allow_html=True)
 
     st.markdown("---")
