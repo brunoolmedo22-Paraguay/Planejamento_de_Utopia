@@ -895,7 +895,7 @@ def tab_termo(socio: dict):
     with ctrl2:
         termo_2035_pct = st.slider(
             "🔥 Participação térmica em 2035 (%)",
-            min_value=10,
+            min_value=38,
             max_value=70,
             value=40,
             step=1,
