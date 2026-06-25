@@ -1398,14 +1398,16 @@ def tab_plano_expansao():
     cm1, cm2, cm3, cm4 = st.columns(4)
     for col, tipo in zip([cm1, cm2, cm3, cm4], TIPO_ORDEM):
         real = frac35[tipo] * 100
-        if tipo in p["meta_2035"]:
-            meta = p["meta_2035"][tipo] * 100
-            ok = abs(real - meta) < 0.5
-            sub = f"meta: {_fmt(meta,0)} % {'✓' if ok else '·'}"
+        if tipo == "Eólica":
+            frac_meta = p.get("frac_eolica_nova", 0.0)
+            sub = f"cobre {_fmt(frac_meta*100,0)} % do crescimento"
+        elif tipo == "Solar":
+            frac_meta = p.get("frac_solar_nova", 0.0)
+            sub = f"cobre {_fmt(frac_meta*100,0)} % do crescimento"
         elif tipo == "Hidro":
-            sub = "resultante (+10 % en. 2025)"
+            sub = "resultante (+10 % en. 2025)" if p.get("ano_hidro") else "sem expansão"
         else:  # Termo
-            sub = "resultante (modula)"
+            sub = "constante (base 2025)" if pid != 3 else "expande (P3)"
         col.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(real,1)} %", sub,
                              TIPO_COR[tipo]), unsafe_allow_html=True)
 
