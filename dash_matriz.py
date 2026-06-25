@@ -935,14 +935,19 @@ TIPO_ORDEM = ["Hidro", "Termo", "Eólica", "Solar"]
 
 
 @st.cache_data(ttl=300)
-def load_demanda_2025_2035(csv_path, ee_2025_fallback: float = 1_450_000.0) -> dict:
+def load_demanda_2025_2035(csv_path, cenario: str = "Referencia",
+                           ee_2025_fallback: float = 1_450_000.0) -> dict:
     """
     Retorna dict {ano: EE_total_MWh} de 2025 a 2035.
     - 2025: do Excel histórico (ENTREGA_DEMANDA), com fallback.
-    - 2026-2035: do CSV de projeção (Cenario=Referencia, Local=Utopia).
+    - 2026-2035: do CSV de projeção (cenario escolhido, Local=Utopia).
+      cenario ∈ {"Referencia", "Alto", "Baixo"}.
     """
+    # taxa de fallback por cenário (a.a.)
+    taxa = {"Referencia": 0.025, "Alto": 0.035, "Baixo": 0.015}.get(cenario, 0.025)
+
     out = {}
-    # 2025 do histórico
+    # 2025 do histórico (independe do cenário)
     try:
         socio = load_socio_2025(str(EXCEL_HIST))
         out[2025] = float(socio["ee"])
@@ -953,20 +958,19 @@ def load_demanda_2025_2035(csv_path, ee_2025_fallback: float = 1_450_000.0) -> d
     try:
         df = pd.read_csv(csv_path)
         df["Ano"] = df["Ano"].astype(int)
-        sub = df[(df["Cenario"] == "Referencia") & (df["Local"] == "Utopia")].sort_values("Ano")
+        sub = df[(df["Cenario"] == cenario) & (df["Local"] == "Utopia")].sort_values("Ano")
         for _, row in sub.iterrows():
             ano = int(row["Ano"])
             if 2026 <= ano <= 2035:
                 out[ano] = float(row["EE_TOTAL"])
     except Exception:
-        # Fallback: crescimento ~2,5% a.a. a partir de 2025
         for ano in range(2026, 2036):
-            out[ano] = out[2025] * (1.025 ** (ano - 2025))
+            out[ano] = out[2025] * ((1 + taxa) ** (ano - 2025))
 
-    # Garante anos faltantes via interpolação linear
+    # Garante anos faltantes via crescimento do cenário
     for ano in range(2025, 2036):
         if ano not in out:
-            out[ano] = out[2025] * (1.025 ** (ano - 2025))
+            out[ano] = out[2025] * ((1 + taxa) ** (ano - 2025))
 
     return out
 
@@ -977,16 +981,16 @@ PROPOSTAS = {
         nome="Alta Penetração Solar",
         icon="☀️",
         cor=SOL,
-        descricao=("Hídrica cresce 10 % (de 40 % → 44 %) via 4 PCHs iguais em "
-                  "2027, 2029, 2031 e 2033. Solar FV em forte expansão. Eólica "
-                  "mantém 5 %. Gás natural ciclo combinado cobre o resto, "
-                  "entrando ano a ano conforme a demanda exigir."),
-        meta_2035={"Hidro": 0.44, "Eólica": 0.05, "Solar": 0.36, "Termo": 0.15},
+        descricao=("Hídrica recebe +10 % da energia que gerava em 2025 (0,58 → "
+                  "0,64 TWh) numa única PCH. Solar FV em forte expansão. Eólica "
+                  "mantém ~5 %. A térmica existente (121 MW) não é desativada: "
+                  "apenas modula para baixo conforme as renováveis crescem."),
+        meta_2035={"Eólica": 0.05, "Solar": 0.36},   # Hidro = +10% energia 2025; Termo = resto
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore"],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
-        anos_hidro=[2027, 2029, 2031, 2033],
+        ano_hidro=2027,
         anos_eolica=[2028, 2032],
         anos_solar=[2026, 2028, 2030, 2032, 2034],
     ),
@@ -994,16 +998,16 @@ PROPOSTAS = {
         nome="Alta Penetração Eólica",
         icon="💨",
         cor=WIN,
-        descricao=("Hídrica cresce 10 % (4 PCHs em 2027/29/31/33). Eólica "
-                  "dominante: mix onshore + offshore em 5 etapas. Solar atinge "
-                  "10 %. Gás natural cobre o resto ano a ano."),
-        meta_2035={"Hidro": 0.44, "Eólica": 0.41, "Solar": 0.10, "Termo": 0.05},
+        descricao=("Hídrica recebe +10 % da energia de 2025 numa única PCH. "
+                  "Eólica dominante: mix onshore + offshore em 5 etapas. Solar "
+                  "atinge ~10 %. A térmica de 2025 não é desativada — só modula."),
+        meta_2035={"Eólica": 0.41, "Solar": 0.10},
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore", "Eólica offshore",
                      "Eólica onshore", "Eólica offshore", "Eólica onshore"],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
-        anos_hidro=[2027, 2029, 2031, 2033],
+        ano_hidro=2027,
         anos_eolica=[2026, 2028, 2030, 2032, 2034],
         anos_solar=[2028, 2032],
     ),
@@ -1012,15 +1016,15 @@ PROPOSTAS = {
         icon="🔥",
         cor=THR,
         descricao=("Sem expansão hídrica — Hidro mantém o mesmo volume e sua "
-                  "fração cai naturalmente (≈31 %) com o crescimento da demanda. "
-                  "Térmica (mix gás natural + biomassa) absorve todo o crescimento. "
-                  "Eólica e Solar têm participação modesta."),
-        meta_2035={"Hidro": 0.312, "Eólica": 0.08, "Solar": 0.05, "Termo": 0.558},
+                  "fração cai naturalmente com o crescimento da demanda. A térmica "
+                  "EXPANDE (mix gás natural + biomassa) para absorver o crescimento, "
+                  "acima da capacidade de 2025. Eólica e Solar modestas."),
+        meta_2035={"Eólica": 0.08, "Solar": 0.05},   # Termo absorve o resto (expande)
         tech_hidro=None,
         tech_eolica=["Eólica onshore"],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)", "Biomassa (cana/madeira)"],
-        anos_hidro=[],
+        ano_hidro=None,
         anos_eolica=[2030],
         anos_solar=[2030],
     ),
@@ -1028,16 +1032,16 @@ PROPOSTAS = {
         nome="Mix Renovável Equilibrado",
         icon="🌱",
         cor="#22c55e",
-        descricao=("Hídrica cresce 10 % (4 PCHs). Eólica e Solar equilibradas "
-                  "em ~22 % cada, com mix onshore + offshore na eólica. Gás "
-                  "natural só como apoio firme."),
-        meta_2035={"Hidro": 0.44, "Eólica": 0.22, "Solar": 0.22, "Termo": 0.12},
+        descricao=("Hídrica recebe +10 % da energia de 2025 numa única PCH. "
+                  "Eólica e Solar equilibradas em ~22 % cada, com mix onshore + "
+                  "offshore na eólica. Térmica de 2025 modula como apoio firme."),
+        meta_2035={"Eólica": 0.22, "Solar": 0.22},
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore", "Eólica offshore",
                      "Eólica onshore", "Eólica offshore"],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
-        anos_hidro=[2027, 2029, 2031, 2033],
+        ano_hidro=2027,
         anos_eolica=[2027, 2029, 2031, 2033],
         anos_solar=[2026, 2028, 2030, 2032, 2034],
     ),
@@ -1046,15 +1050,15 @@ PROPOSTAS = {
         icon="🎯",
         cor=ACCENT,
         descricao=("Heurística: maximizar Eólica onshore (tipicamente menor LCOE "
-                  "global), Hidro cresce 10 % (4 PCHs — barata na operação), "
-                  "Solar de complemento, Térmica reduzida ao mínimo de segurança "
-                  "energética."),
-        meta_2035={"Hidro": 0.44, "Eólica": 0.42, "Solar": 0.10, "Termo": 0.04},
+                  "global), Hidro recebe +10 % da energia de 2025 (PCH barata na "
+                  "operação), Solar de complemento. A térmica de 2025 modula ao "
+                  "mínimo de segurança energética, sem ser desativada."),
+        meta_2035={"Eólica": 0.42, "Solar": 0.10},
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore"],   # só onshore (mais barata)
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
-        anos_hidro=[2027, 2029, 2031, 2033],
+        ano_hidro=2027,
         anos_eolica=[2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034],
         anos_solar=[2030, 2033],
     ),
@@ -1063,13 +1067,15 @@ PROPOSTAS = {
 
 def build_plantas(prop_id: int, demanda: dict) -> list:
     """
-    Constrói o portfólio de usinas novas da proposta.
+    Constrói o portfólio de usinas NOVAS da proposta.
     Lógica (despacho merit-order):
-      • Hidro, Eólica, Solar: entram em etapas pré-definidas, dimensionadas
-        para que em 2035 sua contribuição absoluta atinja a meta da proposta.
-      • Térmica NOVA: só entra se a meta de térmica em 2035 exceder a base 2025.
-        Senão, as térmicas existentes (base) modulam para baixo conforme as
-        renováveis crescem (despacho econômico).
+      • Hidro: UMA única PCH com +10 % da energia que a hídrica gerava em 2025
+        (se a proposta expande hídrica). FC da PCH (~55 %).
+      • Eólica, Solar: entram em etapas, dimensionadas para que em 2035 sua
+        contribuição atinja a meta de fração da proposta.
+      • Térmica: a capacidade de 2025 (121 MW) NUNCA é desativada. Ela apenas
+        modula (gera menos) quando há renovável de sobra. Só se constrói térmica
+        NOVA se a demanda exceder o que a térmica de 2025 consegue suprir.
     """
     p = PROPOSTAS[prop_id]
     plantas = []
@@ -1080,12 +1086,6 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
     # EE 2025 por tipo (matriz base — capacidade existente)
     ee_base = {k: v * ee_2025 for k, v in MATRIZ_BASE_2025.items()}
 
-    # Meta 2035 por tipo (em MWh)
-    ee_meta_2035 = {k: p["meta_2035"][k] * ee_2035 for k in MATRIZ_BASE_2025}
-
-    # ΔEE a adicionar (por tipo)
-    delta = {k: ee_meta_2035[k] - ee_base[k] for k in MATRIZ_BASE_2025}
-
     def _add_planta(tipo, fonte_nome, ee_anual_alvo, ano):
         f = fonte_lookup(fonte_nome)
         pot = ee_anual_alvo / (8760.0 * f["fc"] / 100.0)
@@ -1094,56 +1094,51 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
             ano_entrada=int(ano), ee_anual=ee_anual_alvo, fc=f["fc"],
         ))
 
-    # 1) HÍDRICA — etapas (se houver expansão)
-    if delta["Hidro"] > 1e-3 and p["tech_hidro"] and p["anos_hidro"]:
-        n = len(p["anos_hidro"])
-        ee_por = delta["Hidro"] / n
-        for ano in p["anos_hidro"]:
-            _add_planta("Hidro", p["tech_hidro"], ee_por, ano)
+    # 1) HÍDRICA — UMA PCH com +10 % da energia hídrica de 2025
+    if p.get("tech_hidro") and p.get("ano_hidro"):
+        delta_hidro = 0.10 * ee_base["Hidro"]      # +10 % da energia hídrica 2025
+        _add_planta("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
 
-    # 2) EÓLICA — etapas
-    if delta["Eólica"] > 1e-3 and p["anos_eolica"]:
+    # 2) EÓLICA — etapas para atingir a meta de fração em 2035
+    ee_meta_eol = p["meta_2035"].get("Eólica", 0.0) * ee_2035
+    delta_eol = ee_meta_eol - ee_base["Eólica"]
+    if delta_eol > 1e-3 and p["anos_eolica"]:
         n = len(p["anos_eolica"])
-        ee_por = delta["Eólica"] / n
+        ee_por = delta_eol / n
         techs = p["tech_eolica"]
         for i, ano in enumerate(p["anos_eolica"]):
-            tech = techs[i % len(techs)]
-            _add_planta("Eólica", tech, ee_por, ano)
+            _add_planta("Eólica", techs[i % len(techs)], ee_por, ano)
 
-    # 3) SOLAR — etapas
-    if delta["Solar"] > 1e-3 and p["anos_solar"]:
+    # 3) SOLAR — etapas para atingir a meta de fração em 2035
+    ee_meta_sol = p["meta_2035"].get("Solar", 0.0) * ee_2035
+    delta_sol = ee_meta_sol - ee_base["Solar"]
+    if delta_sol > 1e-3 and p["anos_solar"]:
         n = len(p["anos_solar"])
-        ee_por = delta["Solar"] / n
+        ee_por = delta_sol / n
         techs = p["tech_solar"]
         for i, ano in enumerate(p["anos_solar"]):
-            tech = techs[i % len(techs)]
-            _add_planta("Solar", tech, ee_por, ano)
+            _add_planta("Solar", techs[i % len(techs)], ee_por, ano)
 
-    # 4) TÉRMICA NOVA — só se delta_termo > 0 (meta excede a base 2025)
-    # Caso contrário, a térmica existente modula para baixo (despacho).
-    if delta["Termo"] > 1e-3 and p["tech_termo"]:
+    # 4) TÉRMICA NOVA — só onde a demanda exceder a capacidade térmica de 2025.
+    # A térmica de 2025 (ee_base["Termo"], 121 MW) nunca é removida; ela modula.
+    if p.get("tech_termo"):
         techs_t = p["tech_termo"]
         contador_t = 0
-        # Entradas anuais conforme a necessidade for surgindo
         for ano in range(2026, 2036):
-            # Geração não-térmica disponível neste ano
-            hidro_t = ee_base["Hidro"]
-            eol_t   = ee_base["Eólica"]
-            sol_t   = ee_base["Solar"]
+            hidro_t = ee_base["Hidro"]; eol_t = ee_base["Eólica"]; sol_t = ee_base["Solar"]
             termo_novo_t = 0.0
             for pl in plantas:
                 if pl["ano_entrada"] <= ano:
-                    if pl["tipo"] == "Hidro":  hidro_t += pl["ee_anual"]
+                    if   pl["tipo"] == "Hidro":  hidro_t += pl["ee_anual"]
                     elif pl["tipo"] == "Eólica": eol_t   += pl["ee_anual"]
                     elif pl["tipo"] == "Solar":  sol_t   += pl["ee_anual"]
                     elif pl["tipo"] == "Termo":  termo_novo_t += pl["ee_anual"]
 
             termo_demandado = demanda[ano] - (hidro_t + eol_t + sol_t)
-            termo_disp = ee_base["Termo"] + termo_novo_t
+            termo_disp = ee_base["Termo"] + termo_novo_t   # capacidade térmica máx. de energia
             gap = termo_demandado - termo_disp
             if gap > 1e-3:
-                tech = techs_t[contador_t % len(techs_t)]
-                _add_planta("Termo", tech, gap, ano)
+                _add_planta("Termo", techs_t[contador_t % len(techs_t)], gap, ano)
                 contador_t += 1
 
     return plantas
@@ -1204,9 +1199,17 @@ def simular_plano(plantas: list, demanda: dict) -> dict:
                 demanda=dem, gap=gap, excedente=exced, termo_cap=termo_cap)
 
 
-def economics_plano(plantas: list, wacc_pct: float = 7.0, lfsp: int = 20) -> dict:
+def economics_plano(plantas: list, sim: dict, demanda: dict,
+                    wacc_pct: float = 7.0, lfsp: int = 20) -> dict:
     """
     Agrega economics de TODAS as usinas. LCOE do plano = ΣVPL custos / ΣVPL energia.
+
+    Tratamento da TÉRMICA BASE de 2025 (121 MW já existentes):
+      • NÃO entra CAPEX (já amortizada antes de 2025).
+      • Entra apenas OPEX da energia que efetivamente despacha ano a ano
+        (OPEX fixo da capacidade existente + OPEX variável ∝ energia gerada).
+      • A energia despachada vem de sim["por_tipo"]["Termo"] (modula com o tempo).
+    Térmica NOVA (quando a proposta expande) entra com CAPEX + OPEX normalmente.
     """
     tot = dict(
         capex_total=0.0, opex_f_total=0.0, opex_v_total=0.0,
@@ -1219,6 +1222,7 @@ def economics_plano(plantas: list, wacc_pct: float = 7.0, lfsp: int = 20) -> dic
         serie_opex_v_nom=np.zeros(11),
     )
     anos_idx = {2025 + i: i for i in range(11)}  # 2025..2035 → 0..10
+    w = wacc_pct / 100.0
 
     for pl in plantas:
         f = fonte_lookup(pl["fonte"])
@@ -1247,7 +1251,6 @@ def economics_plano(plantas: list, wacc_pct: float = 7.0, lfsp: int = 20) -> dic
                 tot["serie_opex_f"][idx]  += sf
                 tot["serie_opex_v"][idx]  += sv
                 tot["serie_energia"][idx] += se
-                # nominais (sem desconto)
                 tot["serie_capex_nom"][idx]  += R["pmt_capex"]
                 tot["serie_opex_f_nom"][idx] += R["opex_f_anual"]
                 tot["serie_opex_v_nom"][idx] += R["opex_v_anual"]
@@ -1260,6 +1263,58 @@ def economics_plano(plantas: list, wacc_pct: float = 7.0, lfsp: int = 20) -> dic
             npv_custo=R["npv_total"], npv_energia=R["npv_energia"],
             lcoe=R["lcoe"], delta_op=delta_op,
         ))
+
+    # ─── TÉRMICA BASE 2025 (existente) — só OPEX, sem CAPEX ──────────────
+    # Capacidade existente: gás natural, 121 MW (energia base = 55% de 2025).
+    ee_termo_base_2025 = MATRIZ_BASE_2025["Termo"] * demanda[2025]
+    f_base = fonte_lookup("Gás natural (ciclo comb.)")
+    pot_termo_base = ee_termo_base_2025 / (8760.0 * f_base["fc"] / 100.0)
+    # OPEX fixo anual da capacidade existente (sobre o CAPEX de referência, não pago)
+    capex_ref_base = f_base["A"] * (pot_termo_base * 1000.0) ** f_base["B"]
+    opex_f_base_ano = (f_base["opex_fix"] / 100.0) * capex_ref_base
+
+    # energia térmica base despachada ano a ano = min(despacho total, capacidade base)
+    npv_opex_f_base = 0.0
+    npv_opex_v_base = 0.0
+    npv_energia_base = 0.0
+    opex_f_base_2035 = 0.0
+    opex_v_base_2035 = 0.0
+    for i, ano in enumerate(sim["anos"]):
+        termo_desp = sim["por_tipo"]["Termo"][i]
+        # parte despachada pela base (a base tem prioridade; novas térmicas completam)
+        ee_base_desp = min(termo_desp, ee_termo_base_2025)
+        opex_v_ano = f_base["opex_var"] * ee_base_desp     # US$/MWh × MWh
+        d = 1.0 / (1 + w) ** i                              # desconto (t=0 em 2025)
+        npv_opex_f_base += opex_f_base_ano * d
+        npv_opex_v_base += opex_v_ano * d
+        npv_energia_base += ee_base_desp * d
+        # séries nominais/descontadas no eixo 2025..2035
+        tot["serie_opex_f_nom"][i] += opex_f_base_ano
+        tot["serie_opex_v_nom"][i] += opex_v_ano
+        tot["serie_opex_f"][i] += opex_f_base_ano * d
+        tot["serie_opex_v"][i] += opex_v_ano * d
+        tot["serie_energia"][i] += ee_base_desp * d
+        if ano == 2035:
+            opex_f_base_2035 = opex_f_base_ano
+            opex_v_base_2035 = opex_v_ano
+
+    tot["opex_f_total"]  += opex_f_base_ano       # anual (referência 2035)
+    tot["opex_v_total"]  += opex_v_base_2035
+    tot["npv_opex_f"]    += npv_opex_f_base
+    tot["npv_opex_v"]    += npv_opex_v_base
+    tot["npv_energia"]   += npv_energia_base
+    tot["ee_anual_total"] += sim["por_tipo"]["Termo"][-1] if False else 0  # já contado no despacho
+
+    tot["detalhe"].append(dict(
+        tipo="Termo", fonte="Gás natural (base 2025, só OPEX)", ano_entrada=2025,
+        potencia=pot_termo_base, ee_anual=sim["por_tipo"]["Termo"][-1],
+        capex=0.0, parcela_capex=0.0,
+        opex_f_anual=opex_f_base_ano, opex_v_anual=opex_v_base_2035,
+        npv_custo=npv_opex_f_base + npv_opex_v_base, npv_energia=npv_energia_base,
+        lcoe=((npv_opex_f_base + npv_opex_v_base) / npv_energia_base
+              if npv_energia_base > 0 else 0.0),
+        delta_op=10,
+    ))
 
     tot["npv_total"] = tot["npv_capex"] + tot["npv_opex_f"] + tot["npv_opex_v"]
     tot["lcoe_plano"] = (tot["npv_total"] / tot["npv_energia"]
@@ -1283,17 +1338,28 @@ def tab_plano_expansao():
                  "Selecione uma proposta para ver o portfólio de usinas, a oferta "
                  "ano a ano, a evolução da matriz e o LCOE agregado")
 
-    # Carregar demanda
-    demanda = load_demanda_2025_2035(str(CSV_PROJ))
-
-    # Seletor de proposta
-    prop_id = st.radio(
-        "Proposta de expansão:",
-        options=[1, 2, 3, 4, 5],
-        format_func=lambda i: f"{PROPOSTAS[i]['icon']}  P{i} · {PROPOSTAS[i]['nome']}",
-        horizontal=True, key="plano_prop",
-    )
+    # Seletor de cenário de demanda + proposta
+    csel1, csel2 = st.columns([1, 2.4])
+    with csel1:
+        cen_lbl = st.selectbox(
+            "📊 Cenário de demanda",
+            options=["Referencia", "Alto", "Baixo"],
+            format_func=lambda c: {"Referencia": "Referência",
+                                   "Alto": "Otimista (Alto +PIB)",
+                                   "Baixo": "Pessimista (Baixo −PIB)"}[c],
+            key="plano_cen",
+        )
+    with csel2:
+        prop_id = st.radio(
+            "Proposta de expansão:",
+            options=[1, 2, 3, 4, 5],
+            format_func=lambda i: f"{PROPOSTAS[i]['icon']}  P{i} · {PROPOSTAS[i]['nome']}",
+            horizontal=True, key="plano_prop",
+        )
     p = PROPOSTAS[prop_id]
+
+    # Carregar demanda do cenário escolhido
+    demanda = load_demanda_2025_2035(str(CSV_PROJ), cenario=cen_lbl)
 
     # Banner com descrição
     st.markdown(
@@ -1319,7 +1385,7 @@ def tab_plano_expansao():
     # Construir plantas, simular e calcular economics
     plantas = build_plantas(prop_id, demanda)
     sim = simular_plano(plantas, demanda)
-    eco = economics_plano(plantas, wacc_pct=wacc_p, lfsp=lfsp_p)
+    eco = economics_plano(plantas, sim, demanda, wacc_pct=wacc_p, lfsp=lfsp_p)
 
     # ── KPIs grandes ──────────────────────────────────────────────────
     st.markdown("##### Resultados-chave do plano")
@@ -1354,11 +1420,16 @@ def tab_plano_expansao():
                 unsafe_allow_html=True)
     cm1, cm2, cm3, cm4 = st.columns(4)
     for col, tipo in zip([cm1, cm2, cm3, cm4], TIPO_ORDEM):
-        meta = p["meta_2035"][tipo] * 100
         real = frac35[tipo] * 100
-        ok = abs(real - meta) < 0.5
-        col.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(real,1)} %",
-                             f"meta: {_fmt(meta,0)} % {'✓' if ok else '·'}",
+        if tipo in p["meta_2035"]:
+            meta = p["meta_2035"][tipo] * 100
+            ok = abs(real - meta) < 0.5
+            sub = f"meta: {_fmt(meta,0)} % {'✓' if ok else '·'}"
+        elif tipo == "Hidro":
+            sub = "resultante (+10 % en. 2025)"
+        else:  # Termo
+            sub = "resultante (modula)"
+        col.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(real,1)} %", sub,
                              TIPO_COR[tipo]), unsafe_allow_html=True)
 
     st.markdown("---")
@@ -1605,14 +1676,14 @@ def tab_plano_expansao():
 #  ABA 5 · COMPARAÇÃO DAS 5 PROPOSTAS
 # =======================================================================
 @st.cache_data(ttl=60)
-def _cache_all_propostas(wacc: float, lfsp: int) -> dict:
+def _cache_all_propostas(wacc: float, lfsp: int, cenario: str = "Referencia") -> dict:
     """Roda as 5 propostas de uma vez (cacheado)."""
-    demanda = load_demanda_2025_2035(str(CSV_PROJ))
+    demanda = load_demanda_2025_2035(str(CSV_PROJ), cenario=cenario)
     out = {}
     for pid in [1, 2, 3, 4, 5]:
         plantas = build_plantas(pid, demanda)
         sim = simular_plano(plantas, demanda)
-        eco = economics_plano(plantas, wacc_pct=wacc, lfsp=lfsp)
+        eco = economics_plano(plantas, sim, demanda, wacc_pct=wacc, lfsp=lfsp)
         out[pid] = dict(plantas=plantas, sim=sim, eco=eco,
                        frac35=_matriz_2035_fracoes(sim))
     return out
@@ -1622,7 +1693,16 @@ def tab_comparacao_propostas():
     section_title("Comparação das 5 Propostas",
                  "Lado a lado: LCOE, custos, matriz 2035 e ranking das estratégias")
 
-    cpar1, cpar2 = st.columns([1, 1])
+    cpar0, cpar1, cpar2 = st.columns([1.4, 1, 1])
+    with cpar0:
+        cen_c = st.selectbox(
+            "📊 Cenário de demanda",
+            options=["Referencia", "Alto", "Baixo"],
+            format_func=lambda c: {"Referencia": "Referência",
+                                   "Alto": "Otimista (Alto +PIB)",
+                                   "Baixo": "Pessimista (Baixo −PIB)"}[c],
+            key="comp_cen",
+        )
     with cpar1:
         wacc_c = st.number_input("WACC (% a.a.)", min_value=0.0,
                                 value=float(WACC_PADRAO), step=0.5, format="%.1f",
@@ -1631,7 +1711,7 @@ def tab_comparacao_propostas():
         lfsp_c = st.number_input("LFSP (anos)", min_value=1,
                                 value=20, step=1, key="comp_lfsp")
 
-    R = _cache_all_propostas(wacc_c, lfsp_c)
+    R = _cache_all_propostas(wacc_c, lfsp_c, cen_c)
 
     # Identifica o melhor LCOE
     lcoes = {pid: R[pid]["eco"]["lcoe_plano"] for pid in [1, 2, 3, 4, 5]}
