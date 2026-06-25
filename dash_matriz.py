@@ -981,27 +981,28 @@ PROPOSTAS = {
         nome="Alta Penetração Solar",
         icon="☀️",
         cor=SOL,
-        descricao=("Hídrica recebe +10 % da energia que gerava em 2025 (0,58 → "
-                  "0,64 TWh) numa única PCH. Solar FV em forte expansão. Eólica "
-                  "mantém ~5 %. A térmica existente (121 MW) não é desativada: "
-                  "apenas modula para baixo conforme as renováveis crescem."),
-        meta_2035={"Eólica": 0.05, "Solar": 0.36},   # Hidro = +10% energia 2025; Termo = resto
+        descricao=("Térmica mantém sua geração de 2025 constante (0,80 TWh). "
+                  "Hidro recebe +10 % da energia de 2025 → 1 PCH em 2027. "
+                  "Solar FV absorve todo o crescimento residual em 5 etapas. "
+                  "Eólica onshore mantém o volume de 2025."),
         tech_hidro="PCH",
-        tech_eolica=["Eólica onshore"],
+        tech_eolica=[],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
         ano_hidro=2027,
-        anos_eolica=[2028, 2032],
+        anos_eolica=[],
         anos_solar=[2026, 2028, 2030, 2032, 2034],
+        frac_eolica_nova=0.0,
+        frac_solar_nova=1.0,
     ),
     2: dict(
         nome="Alta Penetração Eólica",
         icon="💨",
         cor=WIN,
-        descricao=("Hídrica recebe +10 % da energia de 2025 numa única PCH. "
-                  "Eólica dominante: mix onshore + offshore em 5 etapas. Solar "
-                  "atinge ~10 %. A térmica de 2025 não é desativada — só modula."),
-        meta_2035={"Eólica": 0.41, "Solar": 0.10},
+        descricao=("Térmica mantém sua geração de 2025 constante. "
+                  "Hidro recebe +10 % (PCH em 2027). "
+                  "Eólica (on+offshore) cobre 70 % do crescimento residual. "
+                  "Solar FV cobre os 30 % restantes."),
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore", "Eólica offshore",
                      "Eólica onshore", "Eólica offshore", "Eólica onshore"],
@@ -1010,16 +1011,16 @@ PROPOSTAS = {
         ano_hidro=2027,
         anos_eolica=[2026, 2028, 2030, 2032, 2034],
         anos_solar=[2028, 2032],
+        frac_eolica_nova=0.70,
+        frac_solar_nova=0.30,
     ),
     3: dict(
         nome="Termo Dominante",
         icon="🔥",
         cor=THR,
-        descricao=("Sem expansão hídrica — Hidro mantém o mesmo volume e sua "
-                  "fração cai naturalmente com o crescimento da demanda. A térmica "
-                  "EXPANDE (mix gás natural + biomassa) para absorver o crescimento, "
-                  "acima da capacidade de 2025. Eólica e Solar modestas."),
-        meta_2035={"Eólica": 0.08, "Solar": 0.05},   # Termo absorve o resto (expande)
+        descricao=("Sem expansão hídrica. A térmica EXPANDE cobrindo 80 % do "
+                  "crescimento com mix gás natural + biomassa. Eólica e Solar "
+                  "cobrem os 20 % restantes."),
         tech_hidro=None,
         tech_eolica=["Eólica onshore"],
         tech_solar=["Solar FV"],
@@ -1027,15 +1028,16 @@ PROPOSTAS = {
         ano_hidro=None,
         anos_eolica=[2030],
         anos_solar=[2030],
+        frac_eolica_nova=0.10,
+        frac_solar_nova=0.10,
     ),
     4: dict(
         nome="Mix Renovável Equilibrado",
         icon="🌱",
         cor="#22c55e",
-        descricao=("Hídrica recebe +10 % da energia de 2025 numa única PCH. "
-                  "Eólica e Solar equilibradas em ~22 % cada, com mix onshore + "
-                  "offshore na eólica. Térmica de 2025 modula como apoio firme."),
-        meta_2035={"Eólica": 0.22, "Solar": 0.22},
+        descricao=("Térmica mantém geração constante. Hidro recebe +10 % (PCH). "
+                  "Crescimento residual dividido 50/50 entre Eólica (on+offshore) "
+                  "e Solar FV."),
         tech_hidro="PCH",
         tech_eolica=["Eólica onshore", "Eólica offshore",
                      "Eólica onshore", "Eólica offshore"],
@@ -1044,159 +1046,134 @@ PROPOSTAS = {
         ano_hidro=2027,
         anos_eolica=[2027, 2029, 2031, 2033],
         anos_solar=[2026, 2028, 2030, 2032, 2034],
+        frac_eolica_nova=0.50,
+        frac_solar_nova=0.50,
     ),
     5: dict(
         nome="Otimizada (mínimo LCOE)",
         icon="🎯",
         cor=ACCENT,
-        descricao=("Heurística: maximizar Eólica onshore (tipicamente menor LCOE "
-                  "global), Hidro recebe +10 % da energia de 2025 (PCH barata na "
-                  "operação), Solar de complemento. A térmica de 2025 modula ao "
-                  "mínimo de segurança energética, sem ser desativada."),
-        meta_2035={"Eólica": 0.42, "Solar": 0.10},
+        descricao=("Térmica mantém geração constante. Hidro recebe +10 % (PCH). "
+                  "Crescimento residual: 80 % para Eólica onshore (menor LCOE), "
+                  "20 % para Solar FV."),
         tech_hidro="PCH",
-        tech_eolica=["Eólica onshore"],   # só onshore (mais barata)
+        tech_eolica=["Eólica onshore"],
         tech_solar=["Solar FV"],
         tech_termo=["Gás natural (ciclo comb.)"],
         ano_hidro=2027,
         anos_eolica=[2026, 2027, 2028, 2029, 2030, 2031, 2032, 2033, 2034],
         anos_solar=[2030, 2033],
+        frac_eolica_nova=0.80,
+        frac_solar_nova=0.20,
     ),
 }
 
 
 def build_plantas(prop_id: int, demanda: dict) -> list:
     """
-    Constrói o portfólio de usinas NOVAS da proposta.
-    Lógica (despacho merit-order):
-      • Hidro: UMA única PCH com +10 % da energia que a hídrica gerava em 2025
-        (se a proposta expande hídrica). FC da PCH (~55 %).
-      • Eólica, Solar: entram em etapas, dimensionadas para que em 2035 sua
-        contribuição atinja a meta de fração da proposta.
-      • Térmica: a capacidade de 2025 (121 MW) NUNCA é desativada. Ela apenas
-        modula (gera menos) quando há renovável de sobra. Só se constrói térmica
-        NOVA se a demanda exceder o que a térmica de 2025 consegue suprir.
+    Constrói o portfólio de usinas NOVAS.
+
+    Regra: a térmica de 2025 (0.80 TWh) é CONSTANTE — nunca diminui.
+    O CRESCIMENTO (EE2035 - EE2025) é coberto por:
+      1. Hidro: +10% da energia hídrica 2025 → 1 PCH
+      2. Eólica: frac_eolica_nova × crescimento_residual
+      3. Solar:  frac_solar_nova  × crescimento_residual
+      4. Térmica nova (P3): quando eólica+solar não chegam (ou para P3 que quer expandir termo)
     """
     p = PROPOSTAS[prop_id]
     plantas = []
-
     ee_2025 = demanda[2025]
     ee_2035 = demanda[2035]
-
-    # EE 2025 por tipo (matriz base — capacidade existente)
     ee_base = {k: v * ee_2025 for k, v in MATRIZ_BASE_2025.items()}
+    crescimento_total = ee_2035 - ee_2025
 
-    def _add_planta(tipo, fonte_nome, ee_anual_alvo, ano):
-        f = fonte_lookup(fonte_nome)
-        pot = ee_anual_alvo / (8760.0 * f["fc"] / 100.0)
-        plantas.append(dict(
-            tipo=tipo, fonte=fonte_nome, potencia=pot,
-            ano_entrada=int(ano), ee_anual=ee_anual_alvo, fc=f["fc"],
-        ))
+    def _add(tipo, fonte, ee_alvo, ano):
+        f = fonte_lookup(fonte)
+        pot = ee_alvo / (8760.0 * f["fc"] / 100.0)
+        plantas.append(dict(tipo=tipo, fonte=fonte, potencia=pot,
+                           ano_entrada=int(ano), ee_anual=ee_alvo, fc=f["fc"]))
 
-    # 1) HÍDRICA — UMA PCH com +10 % da energia hídrica de 2025
+    # 1) HIDRO: +10% da energia hídrica 2025, 1 PCH
+    delta_hidro = 0.0
     if p.get("tech_hidro") and p.get("ano_hidro"):
-        delta_hidro = 0.10 * ee_base["Hidro"]      # +10 % da energia hídrica 2025
-        _add_planta("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
+        delta_hidro = 0.10 * ee_base["Hidro"]
+        _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
 
-    # 2) EÓLICA — etapas para atingir a meta de fração em 2035
-    ee_meta_eol = p["meta_2035"].get("Eólica", 0.0) * ee_2035
-    delta_eol = ee_meta_eol - ee_base["Eólica"]
-    if delta_eol > 1e-3 and p["anos_eolica"]:
+    # crescimento residual após a hidro
+    crescimento_res = crescimento_total - delta_hidro
+
+    # 2) EÓLICA
+    delta_eol = crescimento_res * p.get("frac_eolica_nova", 0.0)
+    if delta_eol > 1e-3 and p.get("anos_eolica"):
         n = len(p["anos_eolica"])
         ee_por = delta_eol / n
         techs = p["tech_eolica"]
         for i, ano in enumerate(p["anos_eolica"]):
-            _add_planta("Eólica", techs[i % len(techs)], ee_por, ano)
+            _add("Eólica", techs[i % len(techs)], ee_por, ano)
 
-    # 3) SOLAR — etapas para atingir a meta de fração em 2035
-    ee_meta_sol = p["meta_2035"].get("Solar", 0.0) * ee_2035
-    delta_sol = ee_meta_sol - ee_base["Solar"]
-    if delta_sol > 1e-3 and p["anos_solar"]:
+    # 3) SOLAR
+    delta_sol = crescimento_res * p.get("frac_solar_nova", 0.0)
+    if delta_sol > 1e-3 and p.get("anos_solar"):
         n = len(p["anos_solar"])
         ee_por = delta_sol / n
         techs = p["tech_solar"]
         for i, ano in enumerate(p["anos_solar"]):
-            _add_planta("Solar", techs[i % len(techs)], ee_por, ano)
+            _add("Solar", techs[i % len(techs)], ee_por, ano)
 
-    # 4) TÉRMICA NOVA — só onde a demanda exceder a capacidade térmica de 2025.
-    # A térmica de 2025 (ee_base["Termo"], 121 MW) nunca é removida; ela modula.
+    # 4) TÉRMICA NOVA — só se ainda houver gap (cobre déficit ou P3 que quer expandir)
     if p.get("tech_termo"):
         techs_t = p["tech_termo"]
-        contador_t = 0
+        cnt = 0
         for ano in range(2026, 2036):
-            hidro_t = ee_base["Hidro"]; eol_t = ee_base["Eólica"]; sol_t = ee_base["Solar"]
-            termo_novo_t = 0.0
+            h = ee_base["Hidro"]; e = ee_base["Eólica"]; s = 0.0; tn = 0.0
             for pl in plantas:
                 if pl["ano_entrada"] <= ano:
-                    if   pl["tipo"] == "Hidro":  hidro_t += pl["ee_anual"]
-                    elif pl["tipo"] == "Eólica": eol_t   += pl["ee_anual"]
-                    elif pl["tipo"] == "Solar":  sol_t   += pl["ee_anual"]
-                    elif pl["tipo"] == "Termo":  termo_novo_t += pl["ee_anual"]
-
-            termo_demandado = demanda[ano] - (hidro_t + eol_t + sol_t)
-            termo_disp = ee_base["Termo"] + termo_novo_t   # capacidade térmica máx. de energia
-            gap = termo_demandado - termo_disp
+                    if   pl["tipo"] == "Hidro":  h  += pl["ee_anual"]
+                    elif pl["tipo"] == "Eólica": e  += pl["ee_anual"]
+                    elif pl["tipo"] == "Solar":  s  += pl["ee_anual"]
+                    elif pl["tipo"] == "Termo":  tn += pl["ee_anual"]
+            termo_cap = ee_base["Termo"] + tn
+            gap = demanda[ano] - (h + e + s + termo_cap)
             if gap > 1e-3:
-                _add_planta("Termo", techs_t[contador_t % len(techs_t)], gap, ano)
-                contador_t += 1
+                _add("Termo", techs_t[cnt % len(techs_t)], gap, ano)
+                cnt += 1
 
     return plantas
 
 
 def simular_plano(plantas: list, demanda: dict) -> dict:
     """
-    Simula o plano ano a ano com DESPACHO MERIT-ORDER:
-      • Renováveis (Hidro/Eólica/Solar): geram sempre seu EE_anual integral.
-      • Térmica: modula para fechar a demanda (sem excedente). Se necessário
-        e disponível, opera; se a renovável já cobre a demanda, opera menos.
-
-    Retorna ee por tipo despachado, demanda, gap (déficit se > 0),
-    excedente renovável (curtailment se > 0) e capacidade térmica instalada.
+    Despacho ano a ano — termo BASE é CONSTANTE, nunca modula para baixo.
+    Hidro/Eólica/Solar: operam sempre ao ee_anual integral.
+    Termo nova (P3): soma-se à base.
     """
     ee_base = {k: v * demanda[2025] for k, v in MATRIZ_BASE_2025.items()}
     anos = list(range(2025, 2036))
     por_tipo = {tipo: [] for tipo in TIPO_ORDEM}
-    total, dem, gap, exced, termo_cap = [], [], [], [], []
+    total, dem, gap, exced, termo_cap_list = [], [], [], [], []
 
     for ano in anos:
-        hidro = ee_base["Hidro"]
-        eol   = ee_base["Eólica"]
-        sol   = ee_base["Solar"]
-        termo_novo = 0.0
+        h = ee_base["Hidro"]; e = ee_base["Eólica"]; s = 0.0; t_novo = 0.0
         for pl in plantas:
             if pl["ano_entrada"] <= ano:
-                if pl["tipo"] == "Hidro":  hidro += pl["ee_anual"]
-                elif pl["tipo"] == "Eólica": eol   += pl["ee_anual"]
-                elif pl["tipo"] == "Solar":  sol   += pl["ee_anual"]
-                elif pl["tipo"] == "Termo":  termo_novo += pl["ee_anual"]
-
-        nao_termo = hidro + eol + sol
-        termo_cap_total = ee_base["Termo"] + termo_novo
-        termo_demandado = demanda[ano] - nao_termo
-
-        if termo_demandado <= 0:
-            # Renováveis cobrem (ou excedem) a demanda → térmica desligada
-            termo_despachado = 0.0
-            excedente_ren = -termo_demandado    # MWh de curtailment
-            servido = demanda[ano]
-        else:
-            termo_despachado = min(termo_demandado, termo_cap_total)
-            excedente_ren = 0.0
-            servido = nao_termo + termo_despachado
-
-        por_tipo["Hidro"].append(hidro)
-        por_tipo["Eólica"].append(eol)
-        por_tipo["Solar"].append(sol)
-        por_tipo["Termo"].append(termo_despachado)
-        total.append(servido)
+                if   pl["tipo"] == "Hidro":  h      += pl["ee_anual"]
+                elif pl["tipo"] == "Eólica": e      += pl["ee_anual"]
+                elif pl["tipo"] == "Solar":  s      += pl["ee_anual"]
+                elif pl["tipo"] == "Termo":  t_novo += pl["ee_anual"]
+        t_total = ee_base["Termo"] + t_novo   # CONSTANTE (+ eventual expansão P3)
+        oferta = h + e + s + t_total
+        por_tipo["Hidro"].append(h)
+        por_tipo["Eólica"].append(e)
+        por_tipo["Solar"].append(s)
+        por_tipo["Termo"].append(t_total)
+        total.append(oferta)
         dem.append(demanda[ano])
-        gap.append(demanda[ano] - servido)     # > 0 = déficit (plano falha)
-        exced.append(excedente_ren)            # > 0 = curtailment renovável
-        termo_cap.append(termo_cap_total)
+        gap.append(demanda[ano] - oferta)
+        exced.append(max(0.0, oferta - demanda[ano]))
+        termo_cap_list.append(t_total)
 
     return dict(anos=anos, por_tipo=por_tipo, total=total,
-                demanda=dem, gap=gap, excedente=exced, termo_cap=termo_cap)
+                demanda=dem, gap=gap, excedente=exced, termo_cap=termo_cap_list)
 
 
 def economics_plano(plantas: list, sim: dict, demanda: dict,
@@ -1433,6 +1410,96 @@ def tab_plano_expansao():
                              TIPO_COR[tipo]), unsafe_allow_html=True)
 
     st.markdown("---")
+
+    # ── Gráfico 0: SOMENTE A EXPANSÃO (usinas novas, sem base 2025) ──────
+    st.markdown("##### 0 · Expansão ao longo do tempo — somente usinas novas")
+    st.caption("Mostra APENAS a geração das usinas construídas neste plano, "
+               "acumulando ano a ano conforme entram em operação. "
+               "Permite verificar: hidro sobe +10 %, térmica não decresce, renováveis crescem.")
+
+    # calcula a geração INCREMENTAL por tipo (descontando a base 2025)
+    ee_base_25 = {k: v * demanda[2025] for k, v in MATRIZ_BASE_2025.items()}
+
+    fig0 = base_fig("", height=360)
+
+    # linhas de referência horizontais (base 2025 de cada tipo)
+    for tipo in TIPO_ORDEM:
+        if ee_base_25[tipo] > 0:
+            fig0.add_hline(
+                y=ee_base_25[tipo] / 1e6,
+                line_dash="dot", line_color=TIPO_COR[tipo], line_width=1.2,
+                annotation_text=f"{tipo} base 2025",
+                annotation_font_size=9,
+                annotation_font_color=TIPO_COR[tipo],
+                annotation_position="right",
+            )
+
+    # curvas de geração TOTAL por tipo (base + novo) para ver a trajetória real
+    for tipo in TIPO_ORDEM:
+        vals = [v / 1e6 for v in sim["por_tipo"][tipo]]
+        fig0.add_trace(go.Scatter(
+            x=sim["anos"], y=vals,
+            mode="lines+markers",
+            name=tipo,
+            line=dict(color=TIPO_COR[tipo], width=2.8),
+            marker=dict(size=7, color=TIPO_COR[tipo],
+                       line=dict(color="white", width=1.5)),
+            fill="tozeroy",
+            fillcolor=TIPO_COR[tipo].replace("#", "rgba(") + "12)" if False else "rgba(0,0,0,0)",
+            hovertemplate=f"<b>{tipo}</b> %{{x}}: %{{y:.4f}} TWh<extra></extra>",
+        ))
+
+    # marca as entradas das usinas novas como linhas verticais
+    for pl in plantas:
+        cor_tipo = TIPO_COR.get(pl["tipo"], TEXT_SEC)
+        fig0.add_vline(
+            x=pl["ano_entrada"] - 0.3,
+            line_dash="dash", line_color=cor_tipo, line_width=1,
+            annotation_text=f"{pl['tipo'][:3]} {pl['ano_entrada']}",
+            annotation_font_size=8,
+            annotation_font_color=cor_tipo,
+            annotation_position="top",
+        )
+
+    fig0.update_layout(
+        yaxis_title="Geração anual (TWh)",
+        xaxis=dict(title="Ano", dtick=1),
+        height=360,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        margin=dict(l=10, r=120, t=20, b=30),
+    )
+    st.plotly_chart(fig0, use_container_width=True, key=f"plano_expansao_{prop_id}")
+
+    # tabela resumo da expansão
+    ee_hidro_2025  = ee_base_25["Hidro"]
+    ee_termo_2025  = ee_base_25["Termo"]
+    ee_eol_2025    = ee_base_25["Eólica"]
+    ee_sol_2025    = ee_base_25["Solar"]
+    ee_hidro_2035  = sim["por_tipo"]["Hidro"][-1]
+    ee_termo_2035  = sim["por_tipo"]["Termo"][-1]
+    ee_eol_2035    = sim["por_tipo"]["Eólica"][-1]
+    ee_sol_2035    = sim["por_tipo"]["Solar"][-1]
+
+    linhas_res = []
+    for tipo, v25, v35 in [("Hidro", ee_hidro_2025, ee_hidro_2035),
+                            ("Termo", ee_termo_2025, ee_termo_2035),
+                            ("Eólica", ee_eol_2025, ee_eol_2035),
+                            ("Solar", ee_sol_2025, ee_sol_2035)]:
+        delta_v = v35 - v25
+        pct_v = delta_v / v25 * 100 if v25 > 0 else float("inf")
+        ok = "✓" if tipo == "Termo" and abs(delta_v) < 1 else \
+             ("✓" if tipo == "Hidro" and abs(v35 - v25*1.10) < 1000 else "–")
+        linhas_res.append({
+            "Tipo": tipo,
+            "2025 (TWh)": f"{v25/1e6:.4f}",
+            "2035 (TWh)": f"{v35/1e6:.4f}",
+            "Δ (TWh)": f"{delta_v/1e6:+.4f}",
+            "Δ (%)": f"{pct_v:+.1f} %",
+            "Verificação": ok,
+        })
+    df_res = pd.DataFrame(linhas_res)
+    st.dataframe(df_res, use_container_width=True, hide_index=True)
+    _gap(12)
 
     # ── Gráfico 1: Demanda vs Oferta proposta ──────────────────────────
     st.markdown("##### 1 · Demanda × Oferta proposta (2025 → 2035)")
