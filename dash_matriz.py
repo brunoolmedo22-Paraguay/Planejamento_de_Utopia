@@ -1407,7 +1407,7 @@ def tab_plano_expansao():
         elif tipo == "Hidro":
             sub = "resultante (+10 % en. 2025)" if p.get("ano_hidro") else "sem expansão"
         else:  # Termo
-            sub = "constante (base 2025)" if pid != 3 else "expande (P3)"
+            sub = "constante (base 2025)" if prop_id != 3 else "expande (P3)"
         col.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(real,1)} %", sub,
                              TIPO_COR[tipo]), unsafe_allow_html=True)
 
