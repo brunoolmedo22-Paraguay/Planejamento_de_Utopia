@@ -1120,9 +1120,8 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         for i, ano in enumerate(p["anos_solar"]):
             _add("Solar", techs[i % len(techs)], ee_por, ano)
 
-    # 4) TÉRMICA NOVA — SOMENTE em P3 (Termo Dominante).
-    # Nos outros planos a térmica base é mantida constante; não expande.
-    if p.get("tech_termo") and prop_id == 3:
+    # 4) TÉRMICA NOVA — só se ainda houver gap (cobre déficit ou P3 que quer expandir)
+    if p.get("tech_termo"):
         techs_t = p["tech_termo"]
         cnt = 0
         for ano in range(2026, 2036):
@@ -1595,10 +1594,8 @@ def tab_plano_expansao():
     # ── Tabela de usinas do plano ──────────────────────────────────────
     st.markdown("##### Portfólio de usinas do plano")
     df_p = pd.DataFrame(eco["detalhe"])
-    # exclui a térmica base 2025 da tabela de portfólio (é infra existente, não expansão)
-    df_p_new = df_p[~df_p["fonte"].str.contains("base 2025", na=False)].copy()
-    if not df_p_new.empty:
-        df_show = df_p_new.copy()
+    if not df_p.empty:
+        df_show = df_p.copy()
         df_show = df_show.sort_values(["ano_entrada", "tipo"]).reset_index(drop=True)
         df_show.insert(0, "#", range(1, len(df_show) + 1))
         df_show = df_show.rename(columns={
