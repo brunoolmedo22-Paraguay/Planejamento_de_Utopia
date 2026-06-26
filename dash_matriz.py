@@ -1805,13 +1805,21 @@ def tab_comparacao_propostas():
 
 
 def run_matriz(page=None):
-    st.markdown(
-        f'<h1 style="font-size:32px;font-weight:800;color:{TEXT_PRI};letter-spacing:-0.6px;'
-        f'margin-bottom:2px;">Matriz Energética · UTÓPIA</h1>'
-        f'<p style="font-size:14px;color:{TEXT_SEC};margin-bottom:18px;">'
-        f'Plano Decenal de Expansão (2025 → 2035) — análise econômica e tarifária</p>',
-        unsafe_allow_html=True,
-    )
+    _col_title, _col_btn = st.columns([5, 1])
+    with _col_title:
+        st.markdown(
+            f'<h1 style="font-size:32px;font-weight:800;color:{TEXT_PRI};letter-spacing:-0.6px;'
+            f'margin-bottom:2px;">Matriz Energética · UTÓPIA</h1>'
+            f'<p style="font-size:14px;color:{TEXT_SEC};margin-bottom:4px;">'
+            f'Plano Decenal de Expansão (2025 → 2035) — análise econômica e tarifária</p>',
+            unsafe_allow_html=True,
+        )
+    with _col_btn:
+        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
+        if st.button("🗑️ Limpar cache", help="Força recálculo — use se os dados parecerem desatualizados", key="btn_clear_cache"):
+            st.cache_data.clear()
+            st.success("Cache limpo! Recarregando…")
+            st.rerun()
 
     t_atual, t_cfg, t_econ, t_plano, t_comp = st.tabs(
         ["📅 Atualidade (2025)",
