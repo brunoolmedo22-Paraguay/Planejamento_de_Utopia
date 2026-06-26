@@ -1023,17 +1023,18 @@ PROPOSTAS = {
 
 def build_plantas(prop_id: int, demanda: dict) -> list:
     """
-    Constrói o portfólio de usinas NOVAS com lógica gap-driven.
+    Constrói o portfólio de usinas NOVAS com lógica gap incremental.
 
-    Para cada ano com entrada programada (eólica ou solar), calcula o gap
-    REAL entre demanda e oferta acumulada até aquele momento e dimensiona
-    a usina exatamente para fechar esse gap — sem fatias fixas cegas.
+    Para cada ano com entrada programada, dimensiona a usina para cobrir
+    o gap máximo entre o ano de entrada e o ano imediatamente anterior
+    à próxima entrada — garantindo que não haja déficit nos anos intermediários
+    sem sobreoferta excessiva.
 
     Passos:
       1. Hidro: +10 % da energia hídrica 2025 → 1 PCH (se a proposta tiver)
-      2. Eólica + Solar: por ano programado, gap real × fração da proposta
-      3. Térmica nova: SOMENTE se expande_termo=True — gap-driven ano a ano (P3)
-      4. Patch final: sela qualquer resíduo com Solar FV mínimo
+      2. Eólica + Solar: por ano programado, gap incremental × fração da proposta
+      3. Térmica nova: SOMENTE se expande_termo=True — gap incremental ano a ano (P3)
+      4. Patch final: sela qualquer resíduo pontual com Solar FV mínimo
     """
     p = PROPOSTAS[prop_id]
     plantas = []
@@ -1062,10 +1063,9 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         delta_hidro = 0.10 * ee_base["Hidro"]
         _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
 
-    # 2+3) EÓLICA e SOLAR — gap-driven por ano programado
-    # Processa em ordem cronológica; cada ano dimensiona pelo gap real naquele momento.
-    anos_eolica = p.get("anos_eolica", [])
-    anos_solar  = p.get("anos_solar",  [])
+    # 2+3) EÓLICA e SOLAR — gap incremental por ano programado
+    anos_eolica = sorted(p.get("anos_eolica", []))
+    anos_solar  = sorted(p.get("anos_solar",  []))
     techs_eol   = p.get("tech_eolica", [])
     techs_sol   = p.get("tech_solar",  [])
     frac_eol    = p.get("frac_eolica_nova", 0.0)
@@ -1073,12 +1073,20 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
     cnt_eol = 0
     cnt_sol = 0
 
-    anos_com_entrada = sorted(set(list(anos_eolica) + list(anos_solar)))
+    anos_com_entrada = sorted(set(anos_eolica + anos_solar))
 
-    for ano in anos_com_entrada:
-        gap = demanda[ano] - _oferta_ate(ano)
+    for idx_ano, ano in enumerate(anos_com_entrada):
+        # Gap a cobrir = máximo entre o gap no ano de entrada
+        # e o gap no ano anterior à próxima entrada (cobre os anos intermediários)
+        prox_entrada = anos_com_entrada[idx_ano + 1] if idx_ano + 1 < len(anos_com_entrada) else 2036
+        gap_entrada    = demanda[ano] - _oferta_ate(ano)
+        gap_antes_prox = demanda[prox_entrada - 1] - _oferta_ate(prox_entrada - 1)
+        gap = max(gap_entrada, gap_antes_prox, 0.0)
+
         if gap <= 1e-3:
-            continue  # oferta já cobre este ano — usina desnecessária
+            if ano in anos_eolica: cnt_eol += 1
+            if ano in anos_solar:  cnt_sol += 1
+            continue
 
         tem_eol = ano in anos_eolica
         tem_sol = ano in anos_solar
@@ -1098,18 +1106,20 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
                  gap * (frac_s / soma), ano)
             cnt_sol += 1
 
-    # 4) TÉRMICA NOVA — SOMENTE P3 (expande_termo=True), gap-driven ano a ano
+    # 4) TÉRMICA NOVA — só P3 (expande_termo=True), gap incremental ano a ano
     if p.get("expande_termo") and p.get("tech_termo"):
         techs_t = p["tech_termo"]
         cnt = 0
         for ano in range(2026, 2036):
-            gap = demanda[ano] - _oferta_ate(ano)
+            prox = ano + 1
+            gap_entrada    = demanda[ano] - _oferta_ate(ano)
+            gap_antes_prox = demanda[prox - 1] - _oferta_ate(prox - 1) if prox <= 2035 else gap_entrada
+            gap = max(gap_entrada, gap_antes_prox, 0.0)
             if gap > 1e-3:
                 _add("Termo", techs_t[cnt % len(techs_t)], gap, ano)
                 cnt += 1
 
-    # 5) Patch final: sela qualquer gap residual com Solar FV mínimo.
-    #    Varre em ordem crescente reacumulando as plantas já inseridas.
+    # 5) Patch final: sela qualquer gap residual pontual com Solar FV mínimo
     for ano in range(2025, 2036):
         gap = demanda[ano] - _oferta_ate(ano)
         if gap > 1e-3:
