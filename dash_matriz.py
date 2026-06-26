@@ -236,11 +236,10 @@ def compute_economics(A, B, fc_pct, opex_fix_pct, opex_var,
     serie_energia = [ee_anual     * d for d in disc]
 
     # cronograma COMPLETO de amortização do CAPEX (toda a vida útil = LFSP anos).
-    # A parcela é a mesma todo ano; o plano só "conta" as que caem até 2035.
     anos_full = list(range(0, int(lfsp)))
     disc_full = [1.0 / (1 + w) ** t for t in anos_full]
-    serie_capex_nom_full  = [pmt_capex for _ in anos_full]                  # nominal (constante)
-    serie_capex_disc_full = [pmt_capex * d for d in disc_full]              # trazido ao presente
+    serie_capex_nom_full  = [pmt_capex for _ in anos_full]
+    serie_capex_disc_full = [pmt_capex * d for d in disc_full]
 
     npv_capex   = float(np.sum(serie_capex))
     npv_opex_f  = float(np.sum(serie_opex_f))
@@ -259,12 +258,10 @@ def compute_economics(A, B, fc_pct, opex_fix_pct, opex_var,
         npv_capex=npv_capex, npv_opex_f=npv_opex_f, npv_opex_v=npv_opex_v,
         npv_total=npv_total, npv_energia=npv_energia,
         lcoe=lcoe,
-        # meta + cronograma completo (vida útil = LFSP)
         wacc_frac=w, lfsp=int(lfsp), delta_op=int(delta_op),
         anos_full=anos_full, disc_full=disc_full,
         serie_capex_nom_full=serie_capex_nom_full,
         serie_capex_disc_full=serie_capex_disc_full,
-        # decomposição da tarifa (US$/MWh)
         tar_capex=(npv_capex / npv_energia if npv_energia > 0 else float("nan")),
         tar_opex_f=(npv_opex_f / npv_energia if npv_energia > 0 else float("nan")),
         tar_opex_v=(npv_opex_v / npv_energia if npv_energia > 0 else float("nan")),
@@ -274,11 +271,9 @@ def compute_economics(A, B, fc_pct, opex_fix_pct, opex_var,
 # =======================================================================
 #  ABA 1 · ATUALIDADE (2025)
 # =======================================================================
-# Matriz atual (premissas do usuário)
 MATRIZ_2025 = {"Hidro": 40.0, "Termo": 55.0, "Eólica": 5.0, "Solar": 0.0}
 MATRIZ_COR  = {"Hidro": HYD, "Termo": THR, "Eólica": WIN, "Solar": SOL}
 
-# opções de FC por tecnologia (rótulo exibido → fonte da tabela)
 FC_OPCOES = {
     "Hidro":  ["UHE", "PCH", "CGH"],
     "Termo":  ["Gás natural (ciclo comb.)", "Biomassa (cana/madeira)", "Biogás (resíduos)",
@@ -292,14 +287,13 @@ def tab_atualidade():
     section_title("Matriz Energética Atual · 2025",
                  "Composição da geração, equivalências de energia e indicadores socioeconômicos do País de Utópia")
 
-    # ── dados socioeconômicos (com fallback robusto) ──────────────────
     socio, fonte_ok = None, True
     try:
         socio = load_socio_2025(EXCEL_HIST)
     except Exception:
         fonte_ok = False
 
-    ee_total = socio["ee"] if socio else EE_TOTAL_FALLBACK     # MWh
+    ee_total = socio["ee"] if socio else EE_TOTAL_FALLBACK
     pop      = socio["pop"] if socio else None
     pib      = socio["pib"] if socio else None
     pib_pc   = socio["pib_pc"] if socio else None
@@ -308,7 +302,6 @@ def tab_atualidade():
         st.caption("⚠️ `ENTREGA_DEMANDA_utopia.xlsx` não encontrado — usando EE total ≈ 1,45 TWh "
                   "(fallback). População e PIB indisponíveis.")
 
-    # ── KPIs socioeconômicos ──────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(kpi_card("População 2025", _fmt(pop) if pop else "—", "habitantes", ACCENT_D),
                 unsafe_allow_html=True)
@@ -321,7 +314,6 @@ def tab_atualidade():
 
     _gap(8)
 
-    # ── Equivalências de energia (o KPI em kWh que você pediu) ─────────
     st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;'
                f'text-transform:uppercase;color:{TEXT_SEC};margin:6px 0 6px;">'
                f'Equivalências da energia total de 2025</div>', unsafe_allow_html=True)
@@ -334,7 +326,6 @@ def tab_atualidade():
 
     st.markdown("---")
 
-    # ── Composição da matriz (premissas editáveis) ────────────────────
     cL, cR = st.columns([1, 1.15], gap="large")
 
     with cL:
@@ -348,10 +339,8 @@ def tab_atualidade():
         soma = sum(shares.values())
         if abs(soma - 100.0) > 0.01:
             st.caption(f"Σ = {_fmt(soma,1)} % — os valores serão normalizados para 100 % nos cálculos.")
-        # normaliza p/ cálculo
         shares_n = {k: (v / soma * 100.0 if soma > 0 else 0.0) for k, v in shares.items()}
 
-        # donut
         fig = base_fig("Participação por fonte (%)", height=300)
         labels = list(shares_n.keys())
         vals   = [shares_n[k] for k in labels]
@@ -388,7 +377,6 @@ def tab_atualidade():
             ACCENT,
         )
 
-        # seleção de FC por tecnologia
         fc_sel = {}
         gsel = st.columns(2)
         techs = list(MATRIZ_2025.keys())
@@ -398,13 +386,12 @@ def tab_atualidade():
             esc = col.selectbox(f"FC · {tech}", opt, index=0, key=f"fc_{tech}")
             fc_sel[tech] = fonte_lookup(esc)["fc"]
 
-        # tabela de resultados
         linhas, p_total = [], 0.0
         for tech in techs:
-            part = shares_n[tech]                       # %
-            ee_f = ee_total * part / 100.0              # MWh/ano
-            fc   = fc_sel[tech]                         # %
-            p    = ee_f / (8760.0 * fc / 100.0) if fc > 0 else 0.0   # MW
+            part = shares_n[tech]
+            ee_f = ee_total * part / 100.0
+            fc   = fc_sel[tech]
+            p    = ee_f / (8760.0 * fc / 100.0) if fc > 0 else 0.0
             p_total += p
             linhas.append({
                 "Fonte": tech,
@@ -425,14 +412,12 @@ def tab_atualidade():
         cc1, cc2 = st.columns(2)
         cc1.markdown(kpi_card("Potência instalada total", _fmt(p_total, 1, " MW"),
                              "soma das fontes (estimativa)", ACCENT_D), unsafe_allow_html=True)
-        # fator de capacidade médio do sistema
         fc_medio = (ee_total / (8760.0 * p_total) * 100.0) if p_total > 0 else 0.0
         cc2.markdown(kpi_card("FC médio do sistema", _fmt(fc_medio, 1, " %"),
                              "ponderado pela geração", "#047857"), unsafe_allow_html=True)
 
     _gap(6)
 
-    # ── barras de potência instalada por fonte ────────────────────────
     fig2 = base_fig("Potência instalada estimada por fonte (MW)", height=300)
     fig2.add_trace(go.Bar(
         x=df_pot["Fonte"], y=df_pot["Pot. instalada (MW)"],
@@ -456,7 +441,6 @@ def tab_config_economico():
     section_title("Configuração Econômica",
                  "Parâmetros técnico-econômicos por fonte — base de todo o cálculo de VPL e tarifa")
 
-    # legenda das fórmulas
     st.markdown(
         f'<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;'
         f'padding:14px 18px;margin-bottom:14px;">'
@@ -498,7 +482,6 @@ def tab_config_economico():
            .hide(axis="index"))
     st.dataframe(sty, use_container_width=True, height=430)
 
-    # chips-resumo por grupo
     _gap(6)
     cols = st.columns(4)
     for col, g in zip(cols, ["Hídrica", "Eólica", "Solar", "Térmica"]):
@@ -528,14 +511,13 @@ def tab_analise_economica():
 
     df = fontes_df()
 
-    # ── Entradas ──────────────────────────────────────────────────────
     st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;'
                f'text-transform:uppercase;color:{TEXT_SEC};margin-bottom:6px;">Entradas variáveis</div>',
                unsafe_allow_html=True)
     i1, i2, i3, i4 = st.columns([1.4, 1, 1, 1])
 
     with i1:
-        fonte = st.selectbox("Fonte", df["Fonte"].tolist(), index=6, key="ae_fonte")  # default Eólica onshore
+        fonte = st.selectbox("Fonte", df["Fonte"].tolist(), index=6, key="ae_fonte")
     f = fonte_lookup(fonte)
 
     with i2:
@@ -567,16 +549,13 @@ def tab_analise_economica():
             unsafe_allow_html=True,
         )
 
-    # alerta leve de limite
     _limite_warn(potencia, f["limite"])
 
-    # ── Cálculo ───────────────────────────────────────────────────────
     R = compute_economics(f["A"], f["B"], f["fc"], f["opex_fix"], f["opex_var"],
                          potencia, delta_op, lfsp, wacc)
 
     st.markdown("---")
 
-    # ── Grandezas anuais ──────────────────────────────────────────────
     st.markdown("##### Grandezas anuais")
 
     formula_box(
@@ -630,13 +609,12 @@ def tab_analise_economica():
 
     st.markdown("---")
 
-    # ── Resultado: VPL do custo + Tarifa ──────────────────────────────
     cVPL, cTAR = st.columns([1.25, 1], gap="large")
 
     with cVPL:
         st.markdown("##### Valor Presente Líquido do custo")
         v1, v2, v3 = st.columns(3)
-        custo_nom = R["pmt_capex"] + R["opex_f_anual"] + R["opex_v_anual"]  # desembolso nominal/ano
+        custo_nom = R["pmt_capex"] + R["opex_f_anual"] + R["opex_v_anual"]
         v1.markdown(kpi_card("VPL CAPEX", _us(R["npv_capex"]),
                             f"{_fmt(R['pmt_capex']/custo_nom*100,1)} % do desembolso anual", C_CAPEX),
                     unsafe_allow_html=True)
@@ -648,7 +626,6 @@ def tab_analise_economica():
                     unsafe_allow_html=True)
         _gap(8)
 
-        # barra empilhada da composição do VPL
         fig = base_fig("Composição do VPL do custo (US$)", height=240)
         fig.add_trace(go.Bar(y=["VPL"], x=[R["npv_capex"]], name="CAPEX", orientation="h",
                             marker_color=C_CAPEX, hovertemplate="CAPEX<br>%{x:,.0f} US$<extra></extra>"))
@@ -664,14 +641,11 @@ def tab_analise_economica():
     with cTAR:
         st.markdown("##### Tarifa (LCOE)")
 
-        # ── equação LCOE como SVG inline ──────────────────────────────
         lcoe_svg = """<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
 padding:12px 16px;margin-bottom:10px;text-align:center;">
 <svg viewBox="0 0 340 72" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:340px;">
-  <!-- LCOE = -->
   <text x="4" y="40" font-family="Georgia,serif" font-size="15" fill="#0f172a" font-style="italic">LCOE</text>
   <text x="52" y="40" font-family="Georgia,serif" font-size="15" fill="#0f172a">=</text>
-  <!-- numerador -->
   <text x="72" y="22" font-family="Georgia,serif" font-size="11" fill="#0284c7">
     <tspan font-size="13">&#x2211;</tspan>
     <tspan baseline-shift="super" font-size="9">n</tspan>
@@ -681,9 +655,7 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
   </text>
   <text x="104" y="22" font-family="Georgia,serif" font-size="11" fill="#0284c7"> / (1+r)</text>
   <text x="144" y="18" font-family="Georgia,serif" font-size="9" fill="#0284c7">t</text>
-  <!-- barra de fracción -->
   <line x1="68" y1="32" x2="200" y2="32" stroke="#64748b" stroke-width="1.2"/>
-  <!-- denominador -->
   <text x="72" y="52" font-family="Georgia,serif" font-size="11" fill="#047857">
     <tspan font-size="13">&#x2211;</tspan>
     <tspan baseline-shift="super" font-size="9">n</tspan>
@@ -693,7 +665,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
   </text>
   <text x="104" y="52" font-family="Georgia,serif" font-size="11" fill="#047857"> / (1+r)</text>
   <text x="144" y="48" font-family="Georgia,serif" font-size="9" fill="#047857">t</text>
-  <!-- legenda -->
   <text x="210" y="20" font-family="Arial,sans-serif" font-size="9" fill="#0284c7">C&#x209C; = CAPEX + OPEX</text>
   <text x="210" y="34" font-family="Arial,sans-serif" font-size="9" fill="#047857">E&#x209C; = energia gerada</text>
   <text x="210" y="48" font-family="Arial,sans-serif" font-size="9" fill="#64748b">r = WACC,  t = 0…n</text>
@@ -703,7 +674,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
 </div>"""
         st.markdown(lcoe_svg, unsafe_allow_html=True)
 
-        # card grande da tarifa
         st.markdown(
             f'<div style="background:linear-gradient(135deg,{ACCENT},{ACCENT_D});border-radius:18px;'
             f'padding:22px 24px;color:#fff;box-shadow:0 8px 28px rgba(14,165,233,0.30);">'
@@ -720,7 +690,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
             unsafe_allow_html=True,
         )
         _gap(10)
-        # decomposição da tarifa
         fig2 = base_fig("Composição da tarifa (US$/MWh)", height=210)
         fig2.add_trace(go.Bar(
             x=["CAPEX", "OPEX fixo", "OPEX var."],
@@ -736,26 +705,23 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
 
     st.markdown("---")
 
-    # ── Fluxo de caixa em figuras ─────────────────────────────────────
     st.markdown("##### Fluxo de caixa")
     st.caption("O desembolso ano a ano (CAPEX distribuído na vida útil + OPEX), os mesmos valores "
                "trazidos ao presente e a formação acumulada do VPL.")
 
     ano0      = int(ano_entrada)
-    anos_full = R["anos_full"]                       # 0 … LFSP-1
+    anos_full = R["anos_full"]
     cal_full  = [ano0 + t for t in anos_full]
     dop       = R["delta_op"]
     pmt, opf, opv = R["pmt_capex"], R["opex_f_anual"], R["opex_v_anual"]
-    x_lim     = 2035.5                               # fronteira do horizonte do plano
+    x_lim     = 2035.5
     GRIS      = "#cbd5e1"
 
-    # máscaras dentro / fora do horizonte (até 2035)
     capex_in  = [pmt if t <= dop else 0 for t in anos_full]
     capex_out = [pmt if t >  dop else 0 for t in anos_full]
     opexf_in  = [opf if t <= dop else 0 for t in anos_full]
     opexv_in  = [opv if t <= dop else 0 for t in anos_full]
 
-    # ---- Figura 1 · fluxo de caixa NOMINAL (vida útil inteira) -------------
     st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
                 f'1 · Fluxo de caixa nominal — desembolso a cada ano</div>', unsafe_allow_html=True)
     fig_nom = base_fig("", height=340)
@@ -785,7 +751,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
                f"usina segue pagando depois de 2035, fora do horizonte.")
     _gap(6)
 
-    # ---- Figura 2 · valores TRAZIDOS AO PRESENTE -------------------------
     st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
                 f'2 · Valores trazidos ao presente — fluxo descontado ao WACC</div>',
                 unsafe_allow_html=True)
@@ -811,7 +776,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
                f"desconto encolhe a barra. A soma de todas as barras é o **VPL do custo = {_us(R['npv_total'])}**.")
     _gap(6)
 
-    # ---- Figura 3 · DISTRIBUIÇÃO acumulada do VPL ------------------------
     st.markdown(f'<div style="font-size:13px;font-weight:600;color:{TEXT_PRI};margin:6px 0 2px;">'
                 f'3 · Distribuição acumulada — como o VPL se forma ano a ano</div>',
                 unsafe_allow_html=True)
@@ -841,7 +805,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
 
     st.markdown("---")
 
-    # ── Fluxo de caixa ano a ano (espelho da Sheet3) ──────────────────
     with st.expander("📋 Fluxo de caixa descontado, ano a ano (espelho da planilha · Sheet3)", expanded=False):
         anos = R["anos"]
         df_fc = pd.DataFrame({
@@ -856,7 +819,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
         df_fc["Custo total desc. (US$)"] = (df_fc["CAPEX desc. (US$)"]
                                             + df_fc["OPEX fixo desc. (US$)"]
                                             + df_fc["OPEX var. desc. (US$)"])
-        # linha de totais (VPL)
         tot = {
             "Ano (t)": "VPL", "Ano calendário": "—", "Fator desconto": np.nan,
             "CAPEX desc. (US$)": R["npv_capex"], "OPEX fixo desc. (US$)": R["npv_opex_f"],
@@ -884,7 +846,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
                   f"**{_fmt(R['lcoe'],2)} US$/MWh**. CAPEX amortizado como anuidade de "
                   f"{lfsp} anos, mas só as {delta_op + 1} parcelas até 2035 entram no VPL.")
 
-        # download CSV
         csv = df_fc.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Baixar fluxo de caixa (CSV)", csv,
                           file_name=f"fluxo_caixa_{fonte.split(' ')[0].lower()}_{potencia:.0f}MW.csv",
@@ -892,7 +853,6 @@ padding:12px 16px;margin-bottom:10px;text-align:center;">
 
 
 def _limite_warn(potencia: float, limite: str):
-    """Aviso leve se a potência viola o limite declarado da fonte."""
     try:
         lim = limite.replace(" ", "")
         if lim in ("—", ""):
@@ -918,18 +878,13 @@ def _limite_warn(potencia: float, limite: str):
 
 
 # =======================================================================
-#  ENTRADA — chamado pelo app central (app_utopia.py)
-# =======================================================================
-# =======================================================================
 #  PLANO DECENAL DE EXPANSÃO — NÚCLEO + 2 ABAS
 # =======================================================================
 
 CSV_PROJ = ROOT / "projecoes_demanda.csv"
 
-# Matriz base 2025 (fixa, conforme aba Atualidade)
 MATRIZ_BASE_2025 = {"Hidro": 0.40, "Termo": 0.55, "Eólica": 0.05, "Solar": 0.0}
 
-# Mapeamento tipo → cor (paleta da aba Atualidade)
 TIPO_COR = {"Hidro": HYD, "Termo": THR, "Eólica": WIN, "Solar": SOL}
 TIPO_ORDEM = ["Hidro", "Termo", "Eólica", "Solar"]
 
@@ -937,24 +892,15 @@ TIPO_ORDEM = ["Hidro", "Termo", "Eólica", "Solar"]
 @st.cache_data(ttl=300)
 def load_demanda_2025_2035(csv_path, cenario: str = "Referencia",
                            ee_2025_fallback: float = 1_450_000.0) -> dict:
-    """
-    Retorna dict {ano: EE_total_MWh} de 2025 a 2035.
-    - 2025: do Excel histórico (ENTREGA_DEMANDA), com fallback.
-    - 2026-2035: do CSV de projeção (cenario escolhido, Local=Utopia).
-      cenario ∈ {"Referencia", "Alto", "Baixo"}.
-    """
-    # taxa de fallback por cenário (a.a.)
     taxa = {"Referencia": 0.025, "Alto": 0.035, "Baixo": 0.015}.get(cenario, 0.025)
 
     out = {}
-    # 2025 do histórico (independe do cenário)
     try:
         socio = load_socio_2025(str(EXCEL_HIST))
         out[2025] = float(socio["ee"])
     except Exception:
         out[2025] = ee_2025_fallback
 
-    # 2026-2035 do CSV
     try:
         df = pd.read_csv(csv_path)
         df["Ano"] = df["Ano"].astype(int)
@@ -967,7 +913,6 @@ def load_demanda_2025_2035(csv_path, cenario: str = "Referencia",
         for ano in range(2026, 2036):
             out[ano] = out[2025] * ((1 + taxa) ** (ano - 2025))
 
-    # Garante anos faltantes via crescimento do cenário
     for ano in range(2025, 2036):
         if ano not in out:
             out[ano] = out[2025] * ((1 + taxa) ** (ano - 2025))
@@ -976,6 +921,8 @@ def load_demanda_2025_2035(csv_path, cenario: str = "Referencia",
 
 
 # ── Definição das 5 Propostas ────────────────────────────────────────
+# NOTA: "expande_termo": True  → a proposta constrói usinas térmicas NOVAS para cobrir gap.
+#        Ausente ou False     → térmica BASE de 2025 é CONSTANTE, zero plantas novas de qualquer tipo.
 PROPOSTAS = {
     1: dict(
         nome="Alta Penetração Solar",
@@ -994,6 +941,7 @@ PROPOSTAS = {
         anos_solar=[2026, 2028, 2030, 2032, 2034],
         frac_eolica_nova=0.0,
         frac_solar_nova=1.0,
+        expande_termo=False,   # ← térmica NÃO expande
     ),
     2: dict(
         nome="Alta Penetração Eólica",
@@ -1013,6 +961,7 @@ PROPOSTAS = {
         anos_solar=[2028, 2032],
         frac_eolica_nova=0.70,
         frac_solar_nova=0.30,
+        expande_termo=False,   # ← térmica NÃO expande
     ),
     3: dict(
         nome="Termo Dominante",
@@ -1030,6 +979,7 @@ PROPOSTAS = {
         anos_solar=[2030],
         frac_eolica_nova=0.10,
         frac_solar_nova=0.10,
+        expande_termo=True,    # ← térmica SIM expande (única proposta que faz isso)
     ),
     4: dict(
         nome="Mix Renovável Equilibrado",
@@ -1048,6 +998,7 @@ PROPOSTAS = {
         anos_solar=[2026, 2028, 2030, 2032, 2034],
         frac_eolica_nova=0.50,
         frac_solar_nova=0.50,
+        expande_termo=False,   # ← térmica NÃO expande
     ),
     5: dict(
         nome="Otimizada (mínimo LCOE)",
@@ -1065,6 +1016,7 @@ PROPOSTAS = {
         anos_solar=[2030, 2033],
         frac_eolica_nova=0.80,
         frac_solar_nova=0.20,
+        expande_termo=False,   # ← térmica NÃO expande
     ),
 }
 
@@ -1073,19 +1025,21 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
     """
     Constrói o portfólio de usinas NOVAS.
 
-    Regra: a térmica de 2025 (0.80 TWh) é CONSTANTE — nunca diminui.
-    O CRESCIMENTO (EE2035 - EE2025) é coberto por:
-      1. Hidro: +10% da energia hídrica 2025 → 1 PCH
-      2. Eólica: frac_eolica_nova × crescimento_residual
-      3. Solar:  frac_solar_nova  × crescimento_residual
-      4. Térmica nova (P3): quando eólica+solar não chegam (ou para P3 que quer expandir termo)
+    Regra: a térmica de 2025 (base) é CONSTANTE — nunca diminui, nunca expande,
+    EXCETO na Proposta 3 (expande_termo=True), que constrói novas térmicas para
+    cobrir o gap após eólica e solar.
+
+    Passos:
+      1. Hidro: +10 % da energia hídrica 2025 → 1 PCH (se a proposta tiver)
+      2. Eólica: frac_eolica_nova × crescimento_residual, dividida pelos anos_eolica
+      3. Solar:  frac_solar_nova  × crescimento_residual, dividida pelos anos_solar
+      4. Térmica nova: SOMENTE se expande_termo=True — cobre o gap ano a ano
     """
     p = PROPOSTAS[prop_id]
     plantas = []
     ee_2025 = demanda[2025]
-    ee_2035 = demanda[2035]
     ee_base = {k: v * ee_2025 for k, v in MATRIZ_BASE_2025.items()}
-    crescimento_total = ee_2035 - ee_2025
+    crescimento_total = demanda[2035] - ee_2025
 
     def _add(tipo, fonte, ee_alvo, ano):
         f = fonte_lookup(fonte)
@@ -1120,12 +1074,16 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         for i, ano in enumerate(p["anos_solar"]):
             _add("Solar", techs[i % len(techs)], ee_por, ano)
 
-    # 4) TÉRMICA NOVA — só se ainda houver gap (cobre déficit ou P3 que quer expandir)
-    if p.get("tech_termo"):
+    # 4) TÉRMICA NOVA — SOMENTE se a proposta explicitamente expande térmica (P3)
+    #    Para P1, P2, P4, P5 a base é CONSTANTE → zero plantas novas de termo.
+    if p.get("expande_termo") and p.get("tech_termo"):
         techs_t = p["tech_termo"]
         cnt = 0
         for ano in range(2026, 2036):
-            h = ee_base["Hidro"]; e = ee_base["Eólica"]; s = 0.0; tn = 0.0
+            h = ee_base["Hidro"]
+            e = ee_base["Eólica"]
+            s = 0.0
+            tn = 0.0
             for pl in plantas:
                 if pl["ano_entrada"] <= ano:
                     if   pl["tipo"] == "Hidro":  h  += pl["ee_anual"]
@@ -1160,7 +1118,7 @@ def simular_plano(plantas: list, demanda: dict) -> dict:
                 elif pl["tipo"] == "Eólica": e      += pl["ee_anual"]
                 elif pl["tipo"] == "Solar":  s      += pl["ee_anual"]
                 elif pl["tipo"] == "Termo":  t_novo += pl["ee_anual"]
-        t_total = ee_base["Termo"] + t_novo   # CONSTANTE (+ eventual expansão P3)
+        t_total = ee_base["Termo"] + t_novo
         oferta = h + e + s + t_total
         por_tipo["Hidro"].append(h)
         por_tipo["Eólica"].append(e)
@@ -1180,13 +1138,6 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
                     wacc_pct: float = 7.0, lfsp: int = 20) -> dict:
     """
     Agrega economics de TODAS as usinas. LCOE do plano = ΣVPL custos / ΣVPL energia.
-
-    Tratamento da TÉRMICA BASE de 2025 (121 MW já existentes):
-      • NÃO entra CAPEX (já amortizada antes de 2025).
-      • Entra apenas OPEX da energia que efetivamente despacha ano a ano
-        (OPEX fixo da capacidade existente + OPEX variável ∝ energia gerada).
-      • A energia despachada vem de sim["por_tipo"]["Termo"] (modula com o tempo).
-    Térmica NOVA (quando a proposta expande) entra com CAPEX + OPEX normalmente.
     """
     tot = dict(
         capex_total=0.0, opex_f_total=0.0, opex_v_total=0.0,
@@ -1198,7 +1149,7 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
         serie_capex_nom=np.zeros(11), serie_opex_f_nom=np.zeros(11),
         serie_opex_v_nom=np.zeros(11),
     )
-    anos_idx = {2025 + i: i for i in range(11)}  # 2025..2035 → 0..10
+    anos_idx = {2025 + i: i for i in range(11)}
     w = wacc_pct / 100.0
 
     for pl in plantas:
@@ -1218,7 +1169,6 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
         tot["potencia_total"] += pl["potencia"]
         tot["ee_anual_total"] += R["ee_anual"]
 
-        # série anual da usina mapeada no eixo 2025..2035
         for t, (sc, sf, sv, se) in enumerate(zip(R["serie_capex"], R["serie_opex_f"],
                                                   R["serie_opex_v"], R["serie_energia"])):
             ano = pl["ano_entrada"] + t
@@ -1242,45 +1192,37 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
         ))
 
     # ─── TÉRMICA BASE 2025 (existente) — só OPEX, sem CAPEX ──────────────
-    # Capacidade existente: gás natural, 121 MW (energia base = 55% de 2025).
     ee_termo_base_2025 = MATRIZ_BASE_2025["Termo"] * demanda[2025]
     f_base = fonte_lookup("Gás natural (ciclo comb.)")
     pot_termo_base = ee_termo_base_2025 / (8760.0 * f_base["fc"] / 100.0)
-    # OPEX fixo anual da capacidade existente (sobre o CAPEX de referência, não pago)
     capex_ref_base = f_base["A"] * (pot_termo_base * 1000.0) ** f_base["B"]
     opex_f_base_ano = (f_base["opex_fix"] / 100.0) * capex_ref_base
 
-    # energia térmica base despachada ano a ano = min(despacho total, capacidade base)
     npv_opex_f_base = 0.0
     npv_opex_v_base = 0.0
     npv_energia_base = 0.0
-    opex_f_base_2035 = 0.0
     opex_v_base_2035 = 0.0
     for i, ano in enumerate(sim["anos"]):
         termo_desp = sim["por_tipo"]["Termo"][i]
-        # parte despachada pela base (a base tem prioridade; novas térmicas completam)
         ee_base_desp = min(termo_desp, ee_termo_base_2025)
-        opex_v_ano = f_base["opex_var"] * ee_base_desp     # US$/MWh × MWh
-        d = 1.0 / (1 + w) ** i                              # desconto (t=0 em 2025)
+        opex_v_ano = f_base["opex_var"] * ee_base_desp
+        d = 1.0 / (1 + w) ** i
         npv_opex_f_base += opex_f_base_ano * d
         npv_opex_v_base += opex_v_ano * d
         npv_energia_base += ee_base_desp * d
-        # séries nominais/descontadas no eixo 2025..2035
         tot["serie_opex_f_nom"][i] += opex_f_base_ano
         tot["serie_opex_v_nom"][i] += opex_v_ano
         tot["serie_opex_f"][i] += opex_f_base_ano * d
         tot["serie_opex_v"][i] += opex_v_ano * d
         tot["serie_energia"][i] += ee_base_desp * d
         if ano == 2035:
-            opex_f_base_2035 = opex_f_base_ano
             opex_v_base_2035 = opex_v_ano
 
-    tot["opex_f_total"]  += opex_f_base_ano       # anual (referência 2035)
+    tot["opex_f_total"]  += opex_f_base_ano
     tot["opex_v_total"]  += opex_v_base_2035
     tot["npv_opex_f"]    += npv_opex_f_base
     tot["npv_opex_v"]    += npv_opex_v_base
     tot["npv_energia"]   += npv_energia_base
-    tot["ee_anual_total"] += sim["por_tipo"]["Termo"][-1] if False else 0  # já contado no despacho
 
     tot["detalhe"].append(dict(
         tipo="Termo", fonte="Gás natural (base 2025, só OPEX)", ano_entrada=2025,
@@ -1300,7 +1242,6 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
 
 
 def _matriz_2035_fracoes(sim: dict) -> dict:
-    """Fração realizada de cada tipo em 2035."""
     total_2035 = sim["total"][-1]
     if total_2035 <= 0:
         return {t: 0.0 for t in TIPO_ORDEM}
@@ -1308,14 +1249,13 @@ def _matriz_2035_fracoes(sim: dict) -> dict:
 
 
 # =======================================================================
-#  ABA 4 · PLANO DE EXPANSÃO  (selector de proposta + visualizações)
+#  ABA 4 · PLANO DE EXPANSÃO
 # =======================================================================
 def tab_plano_expansao():
     section_title("Plano Decenal de Expansão · 2025 → 2035",
                  "Selecione uma proposta para ver o portfólio de usinas, a oferta "
                  "ano a ano, a evolução da matriz e o LCOE agregado")
 
-    # Seletor de cenário de demanda + proposta
     csel1, csel2 = st.columns([1, 2.4])
     with csel1:
         cen_lbl = st.selectbox(
@@ -1335,10 +1275,8 @@ def tab_plano_expansao():
         )
     p = PROPOSTAS[prop_id]
 
-    # Carregar demanda do cenário escolhido
     demanda = load_demanda_2025_2035(str(CSV_PROJ), cenario=cen_lbl)
 
-    # Banner com descrição
     st.markdown(
         f'<div style="background:linear-gradient(135deg,{p["cor"]}15,{p["cor"]}05);'
         f'border-left:4px solid {p["cor"]};border-radius:10px;padding:12px 18px;margin:8px 0 16px;">'
@@ -1349,7 +1287,6 @@ def tab_plano_expansao():
         unsafe_allow_html=True,
     )
 
-    # Parâmetros econômicos editáveis
     cpar1, cpar2 = st.columns([1, 1])
     with cpar1:
         wacc_p = st.number_input("WACC (% a.a.)", min_value=0.0,
@@ -1359,7 +1296,6 @@ def tab_plano_expansao():
         lfsp_p = st.number_input("LFSP / Vida útil (anos)", min_value=1,
                                 value=20, step=1, key=f"plano_lfsp_{prop_id}")
 
-    # Construir plantas, simular e calcular economics
     plantas = build_plantas(prop_id, demanda)
     sim = simular_plano(plantas, demanda)
     eco = economics_plano(plantas, sim, demanda, wacc_pct=wacc_p, lfsp=lfsp_p)
@@ -1389,7 +1325,6 @@ def tab_plano_expansao():
                 unsafe_allow_html=True)
 
     _gap(8)
-    # KPIs secundários: matriz 2035 realizada
     frac35 = _matriz_2035_fracoes(sim)
     st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;'
                 f'text-transform:uppercase;color:{TEXT_SEC};margin:8px 0 6px;">'
@@ -1406,25 +1341,22 @@ def tab_plano_expansao():
             sub = f"cobre {_fmt(frac_meta*100,0)} % do crescimento"
         elif tipo == "Hidro":
             sub = "resultante (+10 % en. 2025)" if p.get("ano_hidro") else "sem expansão"
-        else:  # Termo
-            sub = "constante (base 2025)" if prop_id != 3 else "expande (P3)"
+        else:
+            sub = "expande (P3)" if p.get("expande_termo") else "constante (base 2025)"
         col.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(real,1)} %", sub,
                              TIPO_COR[tipo]), unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # ── Gráfico 0: SOMENTE A EXPANSÃO (usinas novas, sem base 2025) ──────
-    st.markdown("##### 0 · Expansão ao longo do tempo — somente usinas novas")
-    st.caption("Mostra APENAS a geração das usinas construídas neste plano, "
-               "acumulando ano a ano conforme entram em operação. "
-               "Permite verificar: hidro sobe +10 %, térmica não decresce, renováveis crescem.")
+    # ── Gráfico 0: trajetória por tipo (base + novas) ──────────────────
+    st.markdown("##### 0 · Expansão ao longo do tempo — trajetória por fonte")
+    st.caption("Geração total por tipo (base 2025 + usinas novas). "
+               "As linhas pontilhadas horizontais marcam o nível base de 2025 de cada tipo.")
 
-    # calcula a geração INCREMENTAL por tipo (descontando a base 2025)
     ee_base_25 = {k: v * demanda[2025] for k, v in MATRIZ_BASE_2025.items()}
 
     fig0 = base_fig("", height=360)
 
-    # linhas de referência horizontais (base 2025 de cada tipo)
     for tipo in TIPO_ORDEM:
         if ee_base_25[tipo] > 0:
             fig0.add_hline(
@@ -1436,7 +1368,6 @@ def tab_plano_expansao():
                 annotation_position="right",
             )
 
-    # curvas de geração TOTAL por tipo (base + novo) para ver a trajetória real
     for tipo in TIPO_ORDEM:
         vals = [v / 1e6 for v in sim["por_tipo"][tipo]]
         fig0.add_trace(go.Scatter(
@@ -1446,12 +1377,9 @@ def tab_plano_expansao():
             line=dict(color=TIPO_COR[tipo], width=2.8),
             marker=dict(size=7, color=TIPO_COR[tipo],
                        line=dict(color="white", width=1.5)),
-            fill="tozeroy",
-            fillcolor=TIPO_COR[tipo].replace("#", "rgba(") + "12)" if False else "rgba(0,0,0,0)",
             hovertemplate=f"<b>{tipo}</b> %{{x}}: %{{y:.4f}} TWh<extra></extra>",
         ))
 
-    # marca as entradas das usinas novas como linhas verticais
     for pl in plantas:
         cor_tipo = TIPO_COR.get(pl["tipo"], TEXT_SEC)
         fig0.add_vline(
@@ -1472,7 +1400,6 @@ def tab_plano_expansao():
     )
     st.plotly_chart(fig0, use_container_width=True, key=f"plano_expansao_{prop_id}")
 
-    # tabela resumo da expansão
     ee_hidro_2025  = ee_base_25["Hidro"]
     ee_termo_2025  = ee_base_25["Termo"]
     ee_eol_2025    = ee_base_25["Eólica"]
@@ -1489,8 +1416,14 @@ def tab_plano_expansao():
                             ("Solar", ee_sol_2025, ee_sol_2035)]:
         delta_v = v35 - v25
         pct_v = delta_v / v25 * 100 if v25 > 0 else float("inf")
-        ok = "✓" if tipo == "Termo" and abs(delta_v) < 1 else \
-             ("✓" if tipo == "Hidro" and abs(v35 - v25*1.10) < 1000 else "–")
+        if tipo == "Termo":
+            ok = "✓ constante" if not p.get("expande_termo") and abs(delta_v) < 1 else \
+                 ("✓ expande" if p.get("expande_termo") else "⚠️")
+        elif tipo == "Hidro":
+            ok = "✓ +10%" if p.get("ano_hidro") and abs(v35 - v25 * 1.10) < 1000 else \
+                 ("✓ sem exp." if not p.get("ano_hidro") else "—")
+        else:
+            ok = "—"
         linhas_res.append({
             "Tipo": tipo,
             "2025 (TWh)": f"{v25/1e6:.4f}",
@@ -1503,7 +1436,7 @@ def tab_plano_expansao():
     st.dataframe(df_res, use_container_width=True, hide_index=True)
     _gap(12)
 
-    # ── Gráfico 1: Demanda vs Oferta proposta ──────────────────────────
+    # ── Gráfico 1: Demanda vs Oferta ────────────────────────────────────
     st.markdown("##### 1 · Demanda × Oferta proposta (2025 → 2035)")
     fig1 = base_fig("", height=340)
     fig1.add_trace(go.Scatter(
@@ -1518,8 +1451,6 @@ def tab_plano_expansao():
         mode="lines+markers", name="Oferta da proposta",
         line=dict(color=p["cor"], width=3.2),
         marker=dict(size=8, color=p["cor"], line=dict(color="white", width=1.5)),
-        fill="tozeroy",
-        fillcolor=p["cor"].replace("#", "rgba(") + "0.10)" if False else "rgba(14,165,233,0.05)",
         hovertemplate="Oferta %{x}: %{y:.3f} ×10⁶ MWh<extra></extra>",
     ))
     fig1.update_layout(yaxis_title="EE (×10⁶ MWh)", xaxis_title="Ano",
@@ -1535,15 +1466,12 @@ def tab_plano_expansao():
                  f"{_fmt(max_def,0)} MWh). Reveja as etapas / metas.")
     elif max_exc > 1.0:
         st.caption(f"Curtailment máximo (excedente renovável): **{_fmt(max_exc,0)} MWh** "
-                  f"em algum ano (renováveis geram mais que a demanda; a térmica desliga). "
-                  f"Em todos os outros anos, a térmica modula para fechar o balanço exatamente.")
+                  f"em algum ano.")
     else:
-        st.caption("A oferta acompanha a demanda em todos os anos do horizonte. "
-                  "A térmica do plano modula sua geração ano a ano (despacho merit-order) "
-                  "para fechar o balanço sem excedente.")
+        st.caption("A oferta acompanha a demanda em todos os anos do horizonte.")
     _gap(10)
 
-    # ── Gráfico 2: Matriz energética ano a ano (stacked bars) ──────────
+    # ── Gráfico 2: Matriz stacked ────────────────────────────────────────
     st.markdown("##### 2 · Evolução da matriz energética (MWh por fonte)")
     fig2 = base_fig("", height=400)
     for tipo in TIPO_ORDEM:
@@ -1566,7 +1494,7 @@ def tab_plano_expansao():
     st.plotly_chart(fig2, use_container_width=True, key=f"plano_matriz_{prop_id}")
     _gap(10)
 
-    # ── Gráfico 3: Evolução das frações da matriz (área 100%) ──────────
+    # ── Gráfico 3: Composição % ───────────────────────────────────────────
     st.markdown("##### 3 · Composição percentual da matriz ano a ano")
     fig3 = base_fig("", height=320)
     fracoes_anuais = {tipo: [] for tipo in TIPO_ORDEM}
@@ -1586,12 +1514,12 @@ def tab_plano_expansao():
     fig3.update_layout(yaxis_title="% da matriz", xaxis_title="Ano",
                        xaxis=dict(dtick=1), height=320,
                        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-                       margin=dict(l=10, r=10, t=20, b=30))
+                       margin=dict(l=10, r=10, t=10, b=30))
     st.plotly_chart(fig3, use_container_width=True, key=f"plano_pct_{prop_id}")
 
     st.markdown("---")
 
-    # ── Tabela de usinas do plano ──────────────────────────────────────
+    # ── Tabela de usinas ─────────────────────────────────────────────────
     st.markdown("##### Portfólio de usinas do plano")
     df_p = pd.DataFrame(eco["detalhe"])
     if not df_p.empty:
@@ -1624,7 +1552,7 @@ def tab_plano_expansao():
         st.info("Sem usinas no plano.")
     _gap(10)
 
-    # ── Composição econômica do plano ──────────────────────────────────
+    # ── Composição econômica ──────────────────────────────────────────────
     cc1, cc2 = st.columns([1.2, 1])
     with cc1:
         st.markdown("##### Composição do VPL do custo")
@@ -1664,10 +1592,9 @@ def tab_plano_expansao():
 
     st.markdown("---")
 
-    # ── Fluxo de caixa agregado do plano ───────────────────────────────
+    # ── Fluxo de caixa agregado ───────────────────────────────────────────
     st.markdown("##### Fluxo de caixa do plano (agregado)")
     anos_eixo = list(range(2025, 2036))
-    # nominal: barras por componente
     fig6 = base_fig("", height=320)
     fig6.add_trace(go.Bar(x=anos_eixo, y=eco["serie_capex_nom"], name="Parcela CAPEX",
                           marker_color=C_CAPEX,
@@ -1687,7 +1614,6 @@ def tab_plano_expansao():
                "operação naquele ano) + OPEX fixo + OPEX variável.")
     _gap(6)
 
-    # descontado + acumulado
     tot_pv = eco["serie_capex"] + eco["serie_opex_f"] + eco["serie_opex_v"]
     acum = np.cumsum(tot_pv)
     fig7 = base_fig("", height=320)
@@ -1713,7 +1639,7 @@ def tab_plano_expansao():
 
     st.markdown("---")
 
-    # ── Download CSV ─────────────────────────────────────────────────
+    # ── Downloads ──────────────────────────────────────────────────────────
     st.markdown("##### 📥 Downloads")
     cd1, cd2 = st.columns(2)
     with cd1:
@@ -1746,7 +1672,6 @@ def tab_plano_expansao():
 # =======================================================================
 @st.cache_data(ttl=60)
 def _cache_all_propostas(wacc: float, lfsp: int, cenario: str = "Referencia") -> dict:
-    """Roda as 5 propostas de uma vez (cacheado)."""
     demanda = load_demanda_2025_2035(str(CSV_PROJ), cenario=cenario)
     out = {}
     for pid in [1, 2, 3, 4, 5]:
@@ -1782,18 +1707,15 @@ def tab_comparacao_propostas():
 
     R = _cache_all_propostas(wacc_c, lfsp_c, cen_c)
 
-    # Identifica o melhor LCOE
     lcoes = {pid: R[pid]["eco"]["lcoe_plano"] for pid in [1, 2, 3, 4, 5]}
     best_id = min(lcoes, key=lcoes.get)
     worst_id = max(lcoes, key=lcoes.get)
 
-    # ── Tabela comparativa ────────────────────────────────────────────
     st.markdown("##### Tabela comparativa")
     linhas = []
     for pid in [1, 2, 3, 4, 5]:
         p = PROPOSTAS[pid]
         eco = R[pid]["eco"]
-        sim = R[pid]["sim"]
         frac = R[pid]["frac35"]
         linhas.append({
             "Proposta": f"{p['icon']} P{pid} · {p['nome']}",
@@ -1832,7 +1754,6 @@ def tab_comparacao_propostas():
 
     st.markdown("---")
 
-    # ── Ranking LCOE ──────────────────────────────────────────────────
     st.markdown("##### Ranking de LCOE")
     ranked = sorted([1, 2, 3, 4, 5], key=lambda i: lcoes[i])
     fig_r = base_fig("", height=320)
@@ -1850,7 +1771,6 @@ def tab_comparacao_propostas():
     st.plotly_chart(fig_r, use_container_width=True, key="cmp_rank")
     _gap(10)
 
-    # ── Donuts da matriz 2035 ─────────────────────────────────────────
     st.markdown("##### Matriz energética em 2035 por proposta")
     cols_d = st.columns(5)
     for i, pid in enumerate([1, 2, 3, 4, 5]):
@@ -1874,7 +1794,6 @@ def tab_comparacao_propostas():
             st.plotly_chart(fig_d, use_container_width=True, key=f"cmp_donut_{pid}")
     _gap(10)
 
-    # ── Composição econômica empilhada por proposta ────────────────────
     st.markdown("##### Composição do VPL do custo por proposta")
     fig_cmp = base_fig("", height=340)
     nomes = [f"P{i}" for i in [1, 2, 3, 4, 5]]
@@ -1896,7 +1815,6 @@ def tab_comparacao_propostas():
     st.plotly_chart(fig_cmp, use_container_width=True, key="cmp_vpl")
     _gap(10)
 
-    # ── Demanda × oferta de todas (linhas sobrepostas) ────────────────
     st.markdown("##### Oferta de cada proposta vs Demanda")
     fig_of = base_fig("", height=340)
     fig_of.add_trace(go.Scatter(
@@ -1920,11 +1838,8 @@ def tab_comparacao_propostas():
                          legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
                          margin=dict(l=10, r=10, t=10, b=30))
     st.plotly_chart(fig_of, use_container_width=True, key="cmp_of")
-    st.caption("Todas as propostas cobrem a demanda ano a ano por construção — a térmica "
-               "do plano fecha o balanço onde falta. As diferenças entre curvas refletem "
-               "leves excedentes de geração renovável escalonada.")
+    st.caption("Todas as propostas cobrem a demanda ano a ano por construção.")
 
-    # ── Download tabela comparativa ───────────────────────────────────
     _gap(10)
     csv_cmp = df_cmp.to_csv(index=False).encode("utf-8")
     st.download_button("⬇️ Baixar tabela comparativa (CSV)", csv_cmp,
