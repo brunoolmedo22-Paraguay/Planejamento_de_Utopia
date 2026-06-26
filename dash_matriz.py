@@ -1029,15 +1029,16 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
     calcula o gap real (demanda − oferta acumulada) e distribui entre as fontes
     que têm entrada programada naquele ano, nas frações da proposta.
 
-    Isso garante que:
-      • Cada usina é dimensionada para o gap incremental do seu ano, não do futuro.
-      • Térmica e renováveis se enxergam (sem bug de sequenciamento).
-      • Zero déficit, zero sobreoferta estrutural.
+    Nos anos SEM entrada programada mas com gap residual (crescimento entre duas
+    entradas), preenche automaticamente com a fonte dominante da proposta.
+
+    Isso garante que a oferta acompanhe a demanda ano a ano sem deficit nem
+    sobreoferta estrutural.
 
     Passos:
       1. Hidro: +10 % da energia hídrica 2025 → 1 PCH (se a proposta tiver)
-      2. Loop unificado 2026→2035: gap × fração de cada fonte que entra no ano
-      3. Patch final: sela qualquer resíduo pontual com Solar FV mínimo
+      2. Loop unificado 2026→2035: gap × fração de cada fonte que entra no ano;
+         anos intermediários preenchidos com a fonte dominante
     """
     p = PROPOSTAS[prop_id]
     plantas = []
@@ -1066,8 +1067,7 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         delta_hidro = 0.10 * ee_base["Hidro"]
         _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
 
-    # 2) LOOP UNIFICADO CRONOLÓGICO: 2026 → 2035
-    # Para cada ano, verifica quais fontes entram e distribui o gap entre elas.
+    # 2) LOOP UNIFICADO CRONOLÓGICO: 2026 → 2035, TODOS os anos
     anos_eol_set = set(p.get("anos_eolica", []))
     anos_sol_set = set(p.get("anos_solar",  []))
     techs_eol    = p.get("tech_eolica", [])
@@ -1083,39 +1083,41 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         if gap <= 1e-3:
             continue
 
-        # Quais fontes entram neste ano?
+        # Quais fontes têm entrada programada neste ano?
         tem_eol = (ano in anos_eol_set) and len(techs_eol) > 0
         tem_sol = (ano in anos_sol_set) and len(techs_sol) > 0
         tem_ter = expande_t and len(techs_ter) > 0
 
-        # Frações efetivas neste ano (só das que realmente entram)
-        fre = frac_eol if tem_eol else 0.0
-        frs = frac_sol if tem_sol else 0.0
-        frt = (1.0 - fre - frs) if tem_ter else 0.0
-        soma = fre + frs + frt
-        if soma < 1e-9:
-            continue
+        if tem_eol or tem_sol or tem_ter:
+            # ── Ano com entrada(s) programada(s): distribui pelas frações ──
+            fre = frac_eol if tem_eol else 0.0
+            frs = frac_sol if tem_sol else 0.0
+            frt = (1.0 - fre - frs) if tem_ter else 0.0
+            soma = fre + frs + frt
+            if soma < 1e-9:
+                continue
 
-        if tem_eol:
-            _add("Eólica", techs_eol[cnt_eol % len(techs_eol)],
-                 gap * (fre / soma), ano)
-            cnt_eol += 1
-
-        if tem_sol:
-            _add("Solar", techs_sol[cnt_sol % len(techs_sol)],
-                 gap * (frs / soma), ano)
-            cnt_sol += 1
-
-        if tem_ter:
-            _add("Termo", techs_ter[cnt_ter % len(techs_ter)],
-                 gap * (frt / soma), ano)
-            cnt_ter += 1
-
-    # 3) Patch final: sela qualquer gap residual pontual com Solar FV mínimo
-    for ano in range(2025, 2036):
-        gap = demanda[ano] - _oferta_ate(ano)
-        if gap > 1e-3:
-            _add("Solar", "Solar FV", gap, ano)
+            if tem_eol:
+                _add("Eólica", techs_eol[cnt_eol % len(techs_eol)],
+                     gap * (fre / soma), ano)
+                cnt_eol += 1
+            if tem_sol:
+                _add("Solar", techs_sol[cnt_sol % len(techs_sol)],
+                     gap * (frs / soma), ano)
+                cnt_sol += 1
+            if tem_ter:
+                _add("Termo", techs_ter[cnt_ter % len(techs_ter)],
+                     gap * (frt / soma), ano)
+                cnt_ter += 1
+        else:
+            # ── Ano intermediário sem entrada programada mas com gap ──
+            # Preenche com a fonte dominante da proposta (maior fração)
+            if frac_eol >= frac_sol and len(techs_eol) > 0:
+                _add("Eólica", techs_eol[cnt_eol % len(techs_eol)], gap, ano)
+                cnt_eol += 1
+            elif len(techs_sol) > 0:
+                _add("Solar", techs_sol[cnt_sol % len(techs_sol)], gap, ano)
+                cnt_sol += 1
 
     return plantas
 
