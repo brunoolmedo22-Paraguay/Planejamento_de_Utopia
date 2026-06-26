@@ -1823,6 +1823,244 @@ def tab_comparacao_propostas():
                       key="dl_cmp")
 
 
+# =======================================================================
+#  ABA 6 · PROJETO FINAL — média ponderada dos 3 cenários (P5)
+# =======================================================================
+def tab_projeto_final():
+    section_title("Projeto Final · Média Ponderada dos Cenários",
+                 "Proposta P5 (Otimizada) avaliada nos 3 cenários de demanda, "
+                 "ponderados pela probabilidade de ocorrência")
+
+    # ── Pesos editáveis ───────────────────────────────────────────────
+    st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.08em;'
+               f'text-transform:uppercase;color:{TEXT_SEC};margin-bottom:6px;">'
+               f'Probabilidade de cada cenário (%)</div>', unsafe_allow_html=True)
+    pw1, pw2, pw3 = st.columns(3)
+    w_ref  = pw1.number_input("Referência", 0.0, 100.0, 50.0, 5.0, key="pf_wr")
+    w_alt  = pw2.number_input("Otimista (Alto)", 0.0, 100.0, 25.0, 5.0, key="pf_wa")
+    w_bai  = pw3.number_input("Pessimista (Baixo)", 0.0, 100.0, 25.0, 5.0, key="pf_wb")
+    soma_w = w_ref + w_alt + w_bai
+    if abs(soma_w - 100.0) > 0.01:
+        st.caption(f"Σ = {_fmt(soma_w,1)} % — será normalizado para 100 %.")
+    pesos = {"Referencia": w_ref / soma_w, "Alto": w_alt / soma_w, "Baixo": w_bai / soma_w}
+
+    # ── Parâmetros econômicos ─────────────────────────────────────────
+    ep1, ep2 = st.columns(2)
+    wacc_pf = ep1.number_input("WACC (% a.a.)", 0.0, value=float(WACC_PADRAO), step=0.5,
+                              format="%.1f", key="pf_wacc")
+    lfsp_pf = ep2.number_input("LFSP (anos)", 1, value=20, step=1, key="pf_lfsp")
+
+    prop_id = 5  # P5 Otimizada
+    p = PROPOSTAS[prop_id]
+
+    # ── Rodar P5 nos 3 cenários ──────────────────────────────────────
+    resultados = {}
+    for cen in ["Referencia", "Alto", "Baixo"]:
+        dem = load_demanda_2025_2035(str(CSV_PROJ), cenario=cen)
+        pl  = build_plantas(prop_id, dem)
+        sim = simular_plano(pl, dem)
+        eco = economics_plano(pl, sim, dem, wacc_pct=wacc_pf, lfsp=lfsp_pf)
+        resultados[cen] = dict(dem=dem, plantas=pl, sim=sim, eco=eco,
+                              frac35=_matriz_2035_fracoes(sim))
+
+    anos = list(range(2025, 2036))
+
+    # ── Médias ponderadas ─────────────────────────────────────────────
+    def media_pond(fn):
+        return sum(pesos[c] * fn(resultados[c]) for c in pesos)
+
+    lcoe_pond  = media_pond(lambda r: r["eco"]["lcoe_plano"])
+    capex_pond = media_pond(lambda r: r["eco"]["capex_total"])
+    npv_pond   = media_pond(lambda r: r["eco"]["npv_total"])
+    pot_pond   = media_pond(lambda r: r["eco"]["potencia_total"])
+
+    demanda_pond = {ano: sum(pesos[c] * resultados[c]["dem"][ano] for c in pesos) for ano in anos}
+    oferta_pond  = {ano: sum(pesos[c] * resultados[c]["sim"]["total"][i] for c in pesos)
+                    for i, ano in enumerate(anos)}
+    matriz_pond  = {tipo: [sum(pesos[c] * resultados[c]["sim"]["por_tipo"][tipo][i] for c in pesos)
+                           for i in range(11)] for tipo in TIPO_ORDEM}
+    frac35_pond  = {tipo: sum(pesos[c] * resultados[c]["frac35"][tipo] for c in pesos)
+                    for tipo in TIPO_ORDEM}
+
+    st.markdown("---")
+
+    # ── KPIs do projeto final ─────────────────────────────────────────
+    st.markdown("##### Resultados ponderados — Projeto Final")
+    k1, k2, k3, k4 = st.columns(4)
+    k1.markdown(
+        f'<div style="background:linear-gradient(135deg,{ACCENT},{ACCENT_D});border-radius:14px;'
+        f'padding:18px 20px;color:#fff;box-shadow:0 6px 20px rgba(14,165,233,0.25);">'
+        f'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;'
+        f'opacity:0.92;">LCOE ponderado</div>'
+        f'<div style="font-size:30px;font-weight:800;margin:4px 0 0;letter-spacing:-0.6px;">'
+        f'{_fmt(lcoe_pond,2)} <span style="font-size:14px;">US$/MWh</span></div>'
+        f'<div style="font-size:11.5px;opacity:0.88;margin-top:2px;">'
+        f'{_fmt(lcoe_pond/1000,4)} US$/kWh</div></div>',
+        unsafe_allow_html=True)
+    k2.markdown(kpi_card("CAPEX ponderado", _us(capex_pond), "nominal", C_CAPEX),
+                unsafe_allow_html=True)
+    k3.markdown(kpi_card("VPL custo ponderado", _us(npv_pond), "@ WACC", TEXT_PRI),
+                unsafe_allow_html=True)
+    k4.markdown(kpi_card("Potência média", _fmt(pot_pond, 1, " MW"),
+                        "adicionada", "#047857"), unsafe_allow_html=True)
+
+    # LCOE por cenário
+    _gap(8)
+    st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;'
+               f'text-transform:uppercase;color:{TEXT_SEC};margin:8px 0 6px;">'
+               f'LCOE por cenário e peso atribuído</div>', unsafe_allow_html=True)
+    lc1, lc2, lc3 = st.columns(3)
+    cen_labels = {"Referencia": "Referência", "Alto": "Otimista", "Baixo": "Pessimista"}
+    cen_cols = [lc1, lc2, lc3]
+    for col, cen in zip(cen_cols, ["Referencia", "Alto", "Baixo"]):
+        lcoe_c = resultados[cen]["eco"]["lcoe_plano"]
+        col.markdown(kpi_card(
+            f"{cen_labels[cen]} (peso {_fmt(pesos[cen]*100,0)} %)",
+            f"{_fmt(lcoe_c,2)} US$/MWh",
+            f"VPL = {_us(resultados[cen]['eco']['npv_total'])}",
+            ACCENT_D), unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Demanda ponderada vs Oferta ponderada ─────────────────────────
+    st.markdown("##### Demanda × Oferta ponderada (2025 → 2035)")
+    fig1 = base_fig("", height=340)
+    # faixas dos cenários
+    dem_alto = [resultados["Alto"]["dem"][a] / 1e6 for a in anos]
+    dem_baixo = [resultados["Baixo"]["dem"][a] / 1e6 for a in anos]
+    fig1.add_trace(go.Scatter(x=anos, y=dem_alto, mode="lines", name="Demanda otimista",
+                              line=dict(color=TEXT_SEC, width=1, dash="dot"),
+                              hovertemplate="%{x}: %{y:.3f}<extra>otimista</extra>"))
+    fig1.add_trace(go.Scatter(x=anos, y=dem_baixo, mode="lines", name="Demanda pessimista",
+                              line=dict(color=TEXT_SEC, width=1, dash="dot"),
+                              fill="tonexty", fillcolor="rgba(100,116,139,0.08)",
+                              hovertemplate="%{x}: %{y:.3f}<extra>pessimista</extra>"))
+    fig1.add_trace(go.Scatter(x=anos, y=[demanda_pond[a]/1e6 for a in anos],
+                              mode="lines+markers", name="Demanda ponderada",
+                              line=dict(color=TEXT_PRI, width=2.5, dash="dash"),
+                              marker=dict(size=6, symbol="diamond"),
+                              hovertemplate="Demanda %{x}: %{y:.3f}<extra></extra>"))
+    fig1.add_trace(go.Scatter(x=anos, y=[oferta_pond[a]/1e6 for a in anos],
+                              mode="lines+markers", name="Oferta ponderada",
+                              line=dict(color=p["cor"], width=3),
+                              marker=dict(size=7, color=p["cor"]),
+                              hovertemplate="Oferta %{x}: %{y:.3f}<extra></extra>"))
+    fig1.update_layout(yaxis_title="EE (×10⁶ MWh)", xaxis=dict(dtick=1, title="Ano"),
+                       height=340, legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                       margin=dict(l=10, r=10, t=20, b=30))
+    st.plotly_chart(fig1, use_container_width=True, key="pf_dem_of")
+    _gap(10)
+
+    # ── Evolução da matriz ponderada (stacked) ────────────────────────
+    st.markdown("##### Evolução da matriz ponderada")
+    cg1, cg2 = st.columns([1.6, 1])
+    with cg1:
+        fig2 = base_fig("", height=380)
+        for tipo in TIPO_ORDEM:
+            fig2.add_trace(go.Bar(x=anos, y=[v/1e6 for v in matriz_pond[tipo]],
+                                  name=tipo, marker_color=TIPO_COR[tipo],
+                                  hovertemplate=f"<b>{tipo}</b> %{{x}}: %{{y:.3f}}<extra></extra>"))
+        fig2.add_trace(go.Scatter(x=anos, y=[demanda_pond[a]/1e6 for a in anos],
+                                  mode="lines+markers", name="Demanda pond.",
+                                  line=dict(color=TEXT_PRI, width=2, dash="dot"),
+                                  marker=dict(size=4, symbol="diamond")))
+        fig2.update_layout(barmode="stack", yaxis_title="EE (×10⁶ MWh)",
+                           xaxis=dict(dtick=1, title="Ano"), height=380,
+                           legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                           margin=dict(l=10, r=10, t=20, b=30))
+        st.plotly_chart(fig2, use_container_width=True, key="pf_matriz")
+
+    with cg2:
+        # Donut da matriz 2035 ponderada
+        labs = [t for t in TIPO_ORDEM if frac35_pond[t] > 0.001]
+        vals = [frac35_pond[t] * 100 for t in labs]
+        cores = [TIPO_COR[t] for t in labs]
+        fig3 = base_fig("Matriz 2035 ponderada", height=280)
+        fig3.add_trace(go.Pie(labels=labs, values=vals, hole=0.55,
+                              marker=dict(colors=cores), textinfo="label+percent",
+                              textfont=dict(size=10),
+                              hovertemplate="%{label}: %{value:.1f} %<extra></extra>"))
+        fig3.update_layout(height=280, showlegend=False, margin=dict(l=5, r=5, t=35, b=5))
+        st.plotly_chart(fig3, use_container_width=True, key="pf_donut")
+
+        # KPIs da composição 2035
+        for tipo in TIPO_ORDEM:
+            st.markdown(kpi_card(f"{tipo} 2035", f"{_fmt(frac35_pond[tipo]*100,1)} %",
+                                "", TIPO_COR[tipo]), unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Composição do VPL ponderado ───────────────────────────────────
+    st.markdown("##### Composição do VPL ponderado")
+    npv_cx = media_pond(lambda r: r["eco"]["npv_capex"])
+    npv_of = media_pond(lambda r: r["eco"]["npv_opex_f"])
+    npv_ov = media_pond(lambda r: r["eco"]["npv_opex_v"])
+    vc1, vc2 = st.columns([1.3, 1])
+    with vc1:
+        fig4 = base_fig("", height=200)
+        fig4.add_trace(go.Bar(y=["VPL"], x=[npv_cx], name="CAPEX", orientation="h",
+                              marker_color=C_CAPEX))
+        fig4.add_trace(go.Bar(y=["VPL"], x=[npv_of], name="OPEX fixo", orientation="h",
+                              marker_color=C_OPEXF))
+        fig4.add_trace(go.Bar(y=["VPL"], x=[npv_ov], name="OPEX var.", orientation="h",
+                              marker_color=C_OPEXV))
+        fig4.update_layout(barmode="stack", height=200, xaxis_title="US$",
+                           yaxis=dict(showticklabels=False),
+                           legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                           margin=dict(l=10, r=10, t=10, b=30))
+        st.plotly_chart(fig4, use_container_width=True, key="pf_vpl")
+    with vc2:
+        v1, v2, v3 = st.columns(3)
+        v1.markdown(kpi_card("VPL CAPEX", _us(npv_cx), "", C_CAPEX), unsafe_allow_html=True)
+        v2.markdown(kpi_card("VPL OPEX F", _us(npv_of), "", C_OPEXF), unsafe_allow_html=True)
+        v3.markdown(kpi_card("VPL OPEX V", _us(npv_ov), "", C_OPEXV), unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Tabela-resumo por cenário ─────────────────────────────────────
+    st.markdown("##### Resumo por cenário")
+    linhas = []
+    for cen in ["Referencia", "Alto", "Baixo"]:
+        eco = resultados[cen]["eco"]
+        linhas.append({
+            "Cenário": cen_labels[cen],
+            "Peso (%)": pesos[cen] * 100,
+            "LCOE (US$/MWh)": eco["lcoe_plano"],
+            "CAPEX (US$)": eco["capex_total"],
+            "VPL custo (US$)": eco["npv_total"],
+            "Potência (MW)": eco["potencia_total"],
+            "Usinas": len(resultados[cen]["plantas"]),
+        })
+    linhas.append({
+        "Cenário": "📊 PONDERADO",
+        "Peso (%)": 100.0,
+        "LCOE (US$/MWh)": lcoe_pond,
+        "CAPEX (US$)": capex_pond,
+        "VPL custo (US$)": npv_pond,
+        "Potência (MW)": pot_pond,
+        "Usinas": "—",
+    })
+    df_pf = pd.DataFrame(linhas)
+
+    def _hl_pond(row):
+        if row["Cenário"] == "📊 PONDERADO":
+            return ["background:#eff6ff;font-weight:700;" for _ in row.index]
+        return ["" for _ in row.index]
+
+    sty = (df_pf.style.apply(_hl_pond, axis=1)
+           .format({"Peso (%)": "{:.0f}", "LCOE (US$/MWh)": "{:,.2f}",
+                    "CAPEX (US$)": "{:,.0f}", "VPL custo (US$)": "{:,.0f}",
+                    "Potência (MW)": "{:,.1f}"}, na_rep="—")
+           .set_properties(**{"font-size": "12.5px"}).hide(axis="index"))
+    st.dataframe(sty, use_container_width=True)
+
+    # ── Download ──────────────────────────────────────────────────────
+    csv_pf = df_pf.to_csv(index=False).encode("utf-8")
+    st.download_button("⬇️ Baixar resumo do Projeto Final (CSV)", csv_pf,
+                      file_name="projeto_final_P5_ponderado.csv", mime="text/csv",
+                      key="dl_pf")
+
+
 def run_matriz(page=None):
     _col_title, _col_btn = st.columns([5, 1])
     with _col_title:
@@ -1840,12 +2078,13 @@ def run_matriz(page=None):
             st.success("Cache limpo! Recarregando…")
             st.rerun()
 
-    t_atual, t_cfg, t_econ, t_plano, t_comp = st.tabs(
+    t_atual, t_cfg, t_econ, t_plano, t_comp, t_proj = st.tabs(
         ["📅 Atualidade (2025)",
          "🧮 Configuração Econômica",
          "🧪 TESTE da Análise Econômica",
          "🗺️ Plano de Expansão",
-         "⚖️ Comparação das Propostas"]
+         "⚖️ Comparação das Propostas",
+         "📊 Projeto Final"]
     )
     with t_atual:
         tab_atualidade()
@@ -1857,6 +2096,8 @@ def run_matriz(page=None):
         tab_plano_expansao()
     with t_comp:
         tab_comparacao_propostas()
+    with t_proj:
+        tab_projeto_final()
 
 
 if __name__ == "__main__":
