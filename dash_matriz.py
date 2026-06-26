@@ -1150,7 +1150,6 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
         serie_opex_v_nom=np.zeros(11),
     )
     anos_idx = {2025 + i: i for i in range(11)}
-    w = wacc_pct / 100.0
 
     for pl in plantas:
         f = fonte_lookup(pl["fonte"])
@@ -1191,50 +1190,8 @@ def economics_plano(plantas: list, sim: dict, demanda: dict,
             lcoe=R["lcoe"], delta_op=delta_op,
         ))
 
-    # ─── TÉRMICA BASE 2025 (existente) — só OPEX, sem CAPEX ──────────────
-    ee_termo_base_2025 = MATRIZ_BASE_2025["Termo"] * demanda[2025]
-    f_base = fonte_lookup("Gás natural (ciclo comb.)")
-    pot_termo_base = ee_termo_base_2025 / (8760.0 * f_base["fc"] / 100.0)
-    capex_ref_base = f_base["A"] * (pot_termo_base * 1000.0) ** f_base["B"]
-    opex_f_base_ano = (f_base["opex_fix"] / 100.0) * capex_ref_base
-
-    npv_opex_f_base = 0.0
-    npv_opex_v_base = 0.0
-    npv_energia_base = 0.0
-    opex_v_base_2035 = 0.0
-    for i, ano in enumerate(sim["anos"]):
-        termo_desp = sim["por_tipo"]["Termo"][i]
-        ee_base_desp = min(termo_desp, ee_termo_base_2025)
-        opex_v_ano = f_base["opex_var"] * ee_base_desp
-        d = 1.0 / (1 + w) ** i
-        npv_opex_f_base += opex_f_base_ano * d
-        npv_opex_v_base += opex_v_ano * d
-        npv_energia_base += ee_base_desp * d
-        tot["serie_opex_f_nom"][i] += opex_f_base_ano
-        tot["serie_opex_v_nom"][i] += opex_v_ano
-        tot["serie_opex_f"][i] += opex_f_base_ano * d
-        tot["serie_opex_v"][i] += opex_v_ano * d
-        tot["serie_energia"][i] += ee_base_desp * d
-        if ano == 2035:
-            opex_v_base_2035 = opex_v_ano
-
-    tot["opex_f_total"]  += opex_f_base_ano
-    tot["opex_v_total"]  += opex_v_base_2035
-    tot["npv_opex_f"]    += npv_opex_f_base
-    tot["npv_opex_v"]    += npv_opex_v_base
-    tot["npv_energia"]   += npv_energia_base
-
-    tot["detalhe"].append(dict(
-        tipo="Termo", fonte="Gás natural (base 2025, só OPEX)", ano_entrada=2025,
-        potencia=pot_termo_base, ee_anual=sim["por_tipo"]["Termo"][-1],
-        capex=0.0, parcela_capex=0.0,
-        opex_f_anual=opex_f_base_ano, opex_v_anual=opex_v_base_2035,
-        npv_custo=npv_opex_f_base + npv_opex_v_base, npv_energia=npv_energia_base,
-        lcoe=((npv_opex_f_base + npv_opex_v_base) / npv_energia_base
-              if npv_energia_base > 0 else 0.0),
-        delta_op=10,
-    ))
-
+    # A térmica BASE de 2025 é pré-existente — seus custos históricos são desconhecidos
+    # e não fazem parte do plano de expansão. O LCOE aqui reflete SOMENTE as usinas novas.
     tot["npv_total"] = tot["npv_capex"] + tot["npv_opex_f"] + tot["npv_opex_v"]
     tot["lcoe_plano"] = (tot["npv_total"] / tot["npv_energia"]
                         if tot["npv_energia"] > 0 else float("nan"))
