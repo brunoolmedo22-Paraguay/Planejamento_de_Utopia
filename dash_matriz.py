@@ -1023,18 +1023,21 @@ PROPOSTAS = {
 
 def build_plantas(prop_id: int, demanda: dict) -> list:
     """
-    Constrói o portfólio de usinas NOVAS com lógica gap incremental.
+    Constrói o portfólio de usinas NOVAS com loop unificado cronológico.
 
-    Para cada ano com entrada programada, dimensiona a usina para cobrir
-    o gap máximo entre o ano de entrada e o ano imediatamente anterior
-    à próxima entrada — garantindo que não haja déficit nos anos intermediários
-    sem sobreoferta excessiva.
+    Um único loop 2026→2035 processa TODAS as tecnologias juntas: para cada ano
+    calcula o gap real (demanda − oferta acumulada) e distribui entre as fontes
+    que têm entrada programada naquele ano, nas frações da proposta.
+
+    Isso garante que:
+      • Cada usina é dimensionada para o gap incremental do seu ano, não do futuro.
+      • Térmica e renováveis se enxergam (sem bug de sequenciamento).
+      • Zero déficit, zero sobreoferta estrutural.
 
     Passos:
       1. Hidro: +10 % da energia hídrica 2025 → 1 PCH (se a proposta tiver)
-      2. Eólica + Solar: por ano programado, gap incremental × fração da proposta
-      3. Térmica nova: SOMENTE se expande_termo=True — gap incremental ano a ano (P3)
-      4. Patch final: sela qualquer resíduo pontual com Solar FV mínimo
+      2. Loop unificado 2026→2035: gap × fração de cada fonte que entra no ano
+      3. Patch final: sela qualquer resíduo pontual com Solar FV mínimo
     """
     p = PROPOSTAS[prop_id]
     plantas = []
@@ -1063,63 +1066,52 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
         delta_hidro = 0.10 * ee_base["Hidro"]
         _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
 
-    # 2+3) EÓLICA e SOLAR — gap incremental por ano programado
-    anos_eolica = sorted(p.get("anos_eolica", []))
-    anos_solar  = sorted(p.get("anos_solar",  []))
-    techs_eol   = p.get("tech_eolica", [])
-    techs_sol   = p.get("tech_solar",  [])
-    frac_eol    = p.get("frac_eolica_nova", 0.0)
-    frac_sol    = p.get("frac_solar_nova",  0.0)
-    cnt_eol = 0
-    cnt_sol = 0
+    # 2) LOOP UNIFICADO CRONOLÓGICO: 2026 → 2035
+    # Para cada ano, verifica quais fontes entram e distribui o gap entre elas.
+    anos_eol_set = set(p.get("anos_eolica", []))
+    anos_sol_set = set(p.get("anos_solar",  []))
+    techs_eol    = p.get("tech_eolica", [])
+    techs_sol    = p.get("tech_solar",  [])
+    techs_ter    = p.get("tech_termo",  [])
+    frac_eol     = p.get("frac_eolica_nova", 0.0)
+    frac_sol     = p.get("frac_solar_nova",  0.0)
+    expande_t    = p.get("expande_termo", False)
+    cnt_eol = 0; cnt_sol = 0; cnt_ter = 0
 
-    anos_com_entrada = sorted(set(anos_eolica + anos_solar))
-
-    for idx_ano, ano in enumerate(anos_com_entrada):
-        # Gap a cobrir = máximo entre o gap no ano de entrada
-        # e o gap no ano anterior à próxima entrada (cobre os anos intermediários)
-        prox_entrada = anos_com_entrada[idx_ano + 1] if idx_ano + 1 < len(anos_com_entrada) else 2036
-        gap_entrada    = demanda[ano] - _oferta_ate(ano)
-        gap_antes_prox = demanda[prox_entrada - 1] - _oferta_ate(prox_entrada - 1)
-        gap = max(gap_entrada, gap_antes_prox, 0.0)
-
+    for ano in range(2026, 2036):
+        gap = demanda[ano] - _oferta_ate(ano)
         if gap <= 1e-3:
-            if ano in anos_eolica: cnt_eol += 1
-            if ano in anos_solar:  cnt_sol += 1
             continue
 
-        tem_eol = ano in anos_eolica
-        tem_sol = ano in anos_solar
-        frac_e  = frac_eol if tem_eol else 0.0
-        frac_s  = frac_sol if tem_sol else 0.0
-        soma    = frac_e + frac_s
+        # Quais fontes entram neste ano?
+        tem_eol = (ano in anos_eol_set) and len(techs_eol) > 0
+        tem_sol = (ano in anos_sol_set) and len(techs_sol) > 0
+        tem_ter = expande_t and len(techs_ter) > 0
+
+        # Frações efetivas neste ano (só das que realmente entram)
+        fre = frac_eol if tem_eol else 0.0
+        frs = frac_sol if tem_sol else 0.0
+        frt = (1.0 - fre - frs) if tem_ter else 0.0
+        soma = fre + frs + frt
         if soma < 1e-9:
             continue
 
-        if tem_eol and techs_eol:
+        if tem_eol:
             _add("Eólica", techs_eol[cnt_eol % len(techs_eol)],
-                 gap * (frac_e / soma), ano)
+                 gap * (fre / soma), ano)
             cnt_eol += 1
 
-        if tem_sol and techs_sol:
+        if tem_sol:
             _add("Solar", techs_sol[cnt_sol % len(techs_sol)],
-                 gap * (frac_s / soma), ano)
+                 gap * (frs / soma), ano)
             cnt_sol += 1
 
-    # 4) TÉRMICA NOVA — só P3 (expande_termo=True), gap incremental ano a ano
-    if p.get("expande_termo") and p.get("tech_termo"):
-        techs_t = p["tech_termo"]
-        cnt = 0
-        for ano in range(2026, 2036):
-            prox = ano + 1
-            gap_entrada    = demanda[ano] - _oferta_ate(ano)
-            gap_antes_prox = demanda[prox - 1] - _oferta_ate(prox - 1) if prox <= 2035 else gap_entrada
-            gap = max(gap_entrada, gap_antes_prox, 0.0)
-            if gap > 1e-3:
-                _add("Termo", techs_t[cnt % len(techs_t)], gap, ano)
-                cnt += 1
+        if tem_ter:
+            _add("Termo", techs_ter[cnt_ter % len(techs_ter)],
+                 gap * (frt / soma), ano)
+            cnt_ter += 1
 
-    # 5) Patch final: sela qualquer gap residual pontual com Solar FV mínimo
+    # 3) Patch final: sela qualquer gap residual pontual com Solar FV mínimo
     for ano in range(2025, 2036):
         gap = demanda[ano] - _oferta_ate(ano)
         if gap > 1e-3:
