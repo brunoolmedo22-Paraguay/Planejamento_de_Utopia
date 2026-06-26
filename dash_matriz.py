@@ -1023,83 +1023,25 @@ PROPOSTAS = {
 
 def build_plantas(prop_id: int, demanda: dict) -> list:
     """
-    Constrói o portfólio de usinas NOVAS.
+    Constrói o portfólio de usinas NOVAS com lógica gap-driven.
 
-    Regra: a térmica de 2025 (base) é CONSTANTE — nunca diminui, nunca expande,
-    EXCETO na Proposta 3 (expande_termo=True), que constrói novas térmicas para
-    cobrir o gap após eólica e solar.
+    Para cada ano com entrada programada (eólica ou solar), calcula o gap
+    REAL entre demanda e oferta acumulada até aquele momento e dimensiona
+    a usina exatamente para fechar esse gap — sem fatias fixas cegas.
 
     Passos:
       1. Hidro: +10 % da energia hídrica 2025 → 1 PCH (se a proposta tiver)
-      2. Eólica: frac_eolica_nova × crescimento_residual, dividida pelos anos_eolica
-      3. Solar:  frac_solar_nova  × crescimento_residual, dividida pelos anos_solar
-      4. Térmica nova: SOMENTE se expande_termo=True — cobre o gap ano a ano
+      2. Eólica + Solar: por ano programado, gap real × fração da proposta
+      3. Térmica nova: SOMENTE se expande_termo=True — gap-driven ano a ano (P3)
+      4. Patch final: sela qualquer resíduo com Solar FV mínimo
     """
     p = PROPOSTAS[prop_id]
     plantas = []
     ee_2025 = demanda[2025]
     ee_base = {k: v * ee_2025 for k, v in MATRIZ_BASE_2025.items()}
-    crescimento_total = demanda[2035] - ee_2025
 
-    def _add(tipo, fonte, ee_alvo, ano):
-        f = fonte_lookup(fonte)
-        pot = ee_alvo / (8760.0 * f["fc"] / 100.0)
-        plantas.append(dict(tipo=tipo, fonte=fonte, potencia=pot,
-                           ano_entrada=int(ano), ee_anual=ee_alvo, fc=f["fc"]))
-
-    # 1) HIDRO: +10% da energia hídrica 2025, 1 PCH
-    delta_hidro = 0.0
-    if p.get("tech_hidro") and p.get("ano_hidro"):
-        delta_hidro = 0.10 * ee_base["Hidro"]
-        _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
-
-    # crescimento residual após a hidro
-    crescimento_res = crescimento_total - delta_hidro
-
-    # 2) EÓLICA
-    delta_eol = crescimento_res * p.get("frac_eolica_nova", 0.0)
-    if delta_eol > 1e-3 and p.get("anos_eolica"):
-        n = len(p["anos_eolica"])
-        ee_por = delta_eol / n
-        techs = p["tech_eolica"]
-        for i, ano in enumerate(p["anos_eolica"]):
-            _add("Eólica", techs[i % len(techs)], ee_por, ano)
-
-    # 3) SOLAR
-    delta_sol = crescimento_res * p.get("frac_solar_nova", 0.0)
-    if delta_sol > 1e-3 and p.get("anos_solar"):
-        n = len(p["anos_solar"])
-        ee_por = delta_sol / n
-        techs = p["tech_solar"]
-        for i, ano in enumerate(p["anos_solar"]):
-            _add("Solar", techs[i % len(techs)], ee_por, ano)
-
-    # 4) TÉRMICA NOVA — SOMENTE se a proposta explicitamente expande térmica (P3)
-    #    Para P1, P2, P4, P5 a base é CONSTANTE → zero plantas novas de termo.
-    if p.get("expande_termo") and p.get("tech_termo"):
-        techs_t = p["tech_termo"]
-        cnt = 0
-        for ano in range(2026, 2036):
-            h = ee_base["Hidro"]
-            e = ee_base["Eólica"]
-            s = 0.0
-            tn = 0.0
-            for pl in plantas:
-                if pl["ano_entrada"] <= ano:
-                    if   pl["tipo"] == "Hidro":  h  += pl["ee_anual"]
-                    elif pl["tipo"] == "Eólica": e  += pl["ee_anual"]
-                    elif pl["tipo"] == "Solar":  s  += pl["ee_anual"]
-                    elif pl["tipo"] == "Termo":  tn += pl["ee_anual"]
-            termo_cap = ee_base["Termo"] + tn
-            gap = demanda[ano] - (h + e + s + termo_cap)
-            if gap > 1e-3:
-                _add("Termo", techs_t[cnt % len(techs_t)], gap, ano)
-                cnt += 1
-
-    # ── Patch: zerar qualquer gap residual com Solar FV mínimo ──────────
-    # Simula o despacho provisório e, se sobrar déficit em algum ano,
-    # insere uma pitada de Solar FV exatamente naquele ano para fechar.
-    for ano in range(2025, 2036):
+    def _oferta_ate(ano):
+        """Oferta total acumulada das plantas já na lista até `ano`."""
         h = ee_base["Hidro"]; e = ee_base["Eólica"]; s = 0.0; tn = 0.0
         for pl in plantas:
             if pl["ano_entrada"] <= ano:
@@ -1107,10 +1049,71 @@ def build_plantas(prop_id: int, demanda: dict) -> list:
                 elif pl["tipo"] == "Eólica": e  += pl["ee_anual"]
                 elif pl["tipo"] == "Solar":  s  += pl["ee_anual"]
                 elif pl["tipo"] == "Termo":  tn += pl["ee_anual"]
-        oferta = h + e + s + ee_base["Termo"] + tn
-        gap_res = demanda[ano] - oferta
-        if gap_res > 1e-3:
-            _add("Solar", "Solar FV", gap_res, ano)
+        return h + e + s + ee_base["Termo"] + tn
+
+    def _add(tipo, fonte, ee_alvo, ano):
+        f = fonte_lookup(fonte)
+        pot = ee_alvo / (8760.0 * f["fc"] / 100.0)
+        plantas.append(dict(tipo=tipo, fonte=fonte, potencia=pot,
+                           ano_entrada=int(ano), ee_anual=ee_alvo, fc=f["fc"]))
+
+    # 1) HIDRO: +10% da energia hídrica 2025, 1 PCH no ano definido
+    if p.get("tech_hidro") and p.get("ano_hidro"):
+        delta_hidro = 0.10 * ee_base["Hidro"]
+        _add("Hidro", p["tech_hidro"], delta_hidro, p["ano_hidro"])
+
+    # 2+3) EÓLICA e SOLAR — gap-driven por ano programado
+    # Processa em ordem cronológica; cada ano dimensiona pelo gap real naquele momento.
+    anos_eolica = p.get("anos_eolica", [])
+    anos_solar  = p.get("anos_solar",  [])
+    techs_eol   = p.get("tech_eolica", [])
+    techs_sol   = p.get("tech_solar",  [])
+    frac_eol    = p.get("frac_eolica_nova", 0.0)
+    frac_sol    = p.get("frac_solar_nova",  0.0)
+    cnt_eol = 0
+    cnt_sol = 0
+
+    anos_com_entrada = sorted(set(list(anos_eolica) + list(anos_solar)))
+
+    for ano in anos_com_entrada:
+        gap = demanda[ano] - _oferta_ate(ano)
+        if gap <= 1e-3:
+            continue  # oferta já cobre este ano — usina desnecessária
+
+        tem_eol = ano in anos_eolica
+        tem_sol = ano in anos_solar
+        frac_e  = frac_eol if tem_eol else 0.0
+        frac_s  = frac_sol if tem_sol else 0.0
+        soma    = frac_e + frac_s
+        if soma < 1e-9:
+            continue
+
+        if tem_eol and techs_eol:
+            _add("Eólica", techs_eol[cnt_eol % len(techs_eol)],
+                 gap * (frac_e / soma), ano)
+            cnt_eol += 1
+
+        if tem_sol and techs_sol:
+            _add("Solar", techs_sol[cnt_sol % len(techs_sol)],
+                 gap * (frac_s / soma), ano)
+            cnt_sol += 1
+
+    # 4) TÉRMICA NOVA — SOMENTE P3 (expande_termo=True), gap-driven ano a ano
+    if p.get("expande_termo") and p.get("tech_termo"):
+        techs_t = p["tech_termo"]
+        cnt = 0
+        for ano in range(2026, 2036):
+            gap = demanda[ano] - _oferta_ate(ano)
+            if gap > 1e-3:
+                _add("Termo", techs_t[cnt % len(techs_t)], gap, ano)
+                cnt += 1
+
+    # 5) Patch final: sela qualquer gap residual com Solar FV mínimo.
+    #    Varre em ordem crescente reacumulando as plantas já inseridas.
+    for ano in range(2025, 2036):
+        gap = demanda[ano] - _oferta_ate(ano)
+        if gap > 1e-3:
+            _add("Solar", "Solar FV", gap, ano)
 
     return plantas
 
